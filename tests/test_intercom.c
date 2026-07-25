@@ -64,6 +64,25 @@ int main(void) {
     assert(runtime.packets_received == 2U);
     assert(runtime.last_relay_count == 0U);
     assert(runtime.relay_invocations == 2U);
+    assert(runtime.connected_peer_count == 2U);
+
+    assert(bluetooth_connect_peer(&runtime, 4U));
+    assert(bluetooth_is_peer_connected(&runtime, 4U));
+    assert(runtime.connected_peer_count == 3U);
+    assert(bluetooth_connect_peer(&runtime, 4U));
+    assert(runtime.connected_peer_count == 3U);
+    assert(bluetooth_disconnect_peer(&runtime, 4U));
+    assert(!bluetooth_is_peer_connected(&runtime, 4U));
+
+    intercom_state_t limit_state;
+    bluetooth_runtime_t limit_runtime = {0};
+    intercom_init(&limit_state);
+    bluetooth_init(&limit_runtime, &limit_state);
+    for (uint8_t peer_id = 1U; peer_id <= INTERCOM_MAX_PEERS; ++peer_id) {
+        assert(bluetooth_connect_peer(&limit_runtime, peer_id));
+    }
+    assert(limit_runtime.connected_peer_count == INTERCOM_MAX_PEERS);
+    assert(!bluetooth_connect_peer(&limit_runtime, 9U));
 
     pairing_store_t store = {0};
     pairing_t persisted[8] = {{0}};
