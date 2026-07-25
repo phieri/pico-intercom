@@ -64,6 +64,15 @@ int main(void) {
     assert(runtime.packets_received == 2U);
     assert(runtime.last_relay_count == 0U);
     assert(runtime.relay_invocations == 2U);
+    assert(runtime.connected_peer_count == 2U);
+
+    assert(bluetooth_connect_peer(&runtime, 4U));
+    assert(bluetooth_is_peer_connected(&runtime, 4U));
+    assert(runtime.connected_peer_count == 3U);
+    assert(bluetooth_connect_peer(&runtime, 4U));
+    assert(runtime.connected_peer_count == 3U);
+    assert(bluetooth_disconnect_peer(&runtime, 4U));
+    assert(!bluetooth_is_peer_connected(&runtime, 4U));
 
     pairing_store_t store = {0};
     pairing_t persisted[8] = {{0}};

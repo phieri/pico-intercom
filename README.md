@@ -5,7 +5,7 @@ A small C project for a Raspberry Pi Pico 2 W that models a local Bluetooth audi
 ## What is included
 
 - An intercom routing core that rebroadcasts audio from one connected headset to every other connected headset while PTT is active.
-- A Bluetooth-facing shim that records incoming audio packets and exposes relay stats that can later be wired to a real Pico W/Bluetooth stack.
+- A Bluetooth-facing shim that records incoming audio packets, tracks connected headset peers, and exposes relay stats that can later be wired to a real Pico W/Bluetooth stack.
 - A pairing persistence layer that saves connected headset pairings so they can be reloaded across boots; on Pico targets this path is intended to use LittleFS-backed storage.
 - A Pico SDK-based CMake build path that matches the firmware workflow used in `phieri/viking-bio-pwa`.
 - A host-side test target that exercises the rebroadcast logic, Bluetooth shim, and pairing persistence without requiring the Pico toolchain.

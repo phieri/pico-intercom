@@ -25,6 +25,8 @@ int main(void) {
     intercom_set_ptt(&intercom, true);
 
     bluetooth_init(&bluetooth, &intercom);
+    bluetooth_connect_peer(&bluetooth, 2U);
+    bluetooth_connect_peer(&bluetooth, 3U);
     bluetooth_handle_audio(&bluetooth, 1U, payload, sizeof(payload));
 
     pairing_store_init(&pairing_store, "pairings.txt");
