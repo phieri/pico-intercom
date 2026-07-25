@@ -1,3 +1,4 @@
+#include "bluetooth.h"
 #include "intercom.h"
 
 #include <assert.h>
@@ -22,6 +23,7 @@ static void relay_callback(void *context, uint8_t source_peer, uint8_t target_pe
 
 int main(void) {
     intercom_state_t state;
+    bluetooth_runtime_t runtime = {0};
     struct relay_context ctx = {0};
     static const uint8_t payload[] = {0x01, 0x02, 0x03};
 
@@ -43,6 +45,18 @@ int main(void) {
                                   &ctx);
     assert(relayed == 0U);
     assert(ctx.calls == 2U);
+
+    bluetooth_init(&runtime, &state);
+    bluetooth_handle_audio(&runtime, 1U, payload, sizeof(payload));
+    assert(runtime.packets_received == 1U);
+    assert(runtime.last_source_peer == 1U);
+    assert(runtime.last_payload_len == sizeof(payload));
+    assert(runtime.last_relay_count == 2U);
+
+    intercom_set_ptt(&state, false);
+    bluetooth_handle_audio(&runtime, 2U, payload, sizeof(payload));
+    assert(runtime.packets_received == 2U);
+    assert(runtime.last_relay_count == 0U);
 
     return 0;
 }

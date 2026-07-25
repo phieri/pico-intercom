@@ -24,7 +24,9 @@ int main(void) {
     bluetooth_init(&bluetooth, &intercom);
     bluetooth_handle_audio(&bluetooth, 1U, payload, sizeof(payload));
 
-    printf("Pico intercom skeleton ready.\n");
+    printf("Pico intercom ready.\n");
+    printf("Packets received: %zu\n", bluetooth.packets_received);
+    printf("Last source peer: %u\n", (unsigned)bluetooth.last_source_peer);
     printf("Relayed packets: %zu\n", bluetooth.last_relay_count);
     return 0;
 }
