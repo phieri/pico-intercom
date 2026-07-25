@@ -29,7 +29,7 @@ if(PICO_INTERCOM_FORCE_HOST_BUILD)
     endif()
 else()
     if(NOT DEFINED PICO_BOARD OR PICO_BOARD STREQUAL "")
-        set(PICO_BOARD pico_w CACHE STRING "Board type" FORCE)
+        set(PICO_BOARD pico2_w CACHE STRING "Board type" FORCE)
     endif()
 
     include(pico_sdk_import.cmake)
