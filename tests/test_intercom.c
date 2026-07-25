@@ -1,10 +1,13 @@
 #include "bluetooth.h"
-
 #include "intercom.h"
+#include "pairings.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 struct relay_context {
     size_t calls;
@@ -61,6 +64,24 @@ int main(void) {
     assert(runtime.packets_received == 2U);
     assert(runtime.last_relay_count == 0U);
     assert(runtime.relay_invocations == 2U);
+
+    pairing_store_t store = {0};
+    pairing_t persisted[8] = {{0}};
+    pairing_t new_pairing = {.peer_id = 4U, .name = "headset-4"};
+    size_t persisted_count = 0U;
+
+    if (remove("pairings_test.txt") != 0 && errno != ENOENT) {
+        assert(false);
+    }
+
+    assert(pairing_store_init(&store, "pairings_test.txt"));
+    assert(pairing_store_clear(&store));
+    assert(pairing_store_save(&store, &new_pairing));
+    persisted_count = 0U;
+    assert(pairing_store_load(&store, persisted, &persisted_count));
+    assert(persisted_count == 1U);
+    assert(persisted[0].peer_id == 4U);
+    assert(strcmp(persisted[0].name, "headset-4") == 0);
 
     return 0;
 }
