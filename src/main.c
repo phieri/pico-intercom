@@ -3,9 +3,9 @@
 
 #ifdef PICO_INTERCOM_TARGET
 #include "pico/stdlib.h"
-#else
-#include <stdio.h>
 #endif
+
+#include <stdio.h>
 
 int main(void) {
 #ifdef PICO_INTERCOM_TARGET
