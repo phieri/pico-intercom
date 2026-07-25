@@ -96,7 +96,10 @@ void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
         return;
     }
 
-    bluetooth_connect_peer(runtime, source_peer);
+    /* Fresh audio can still be relayed even if the runtime cannot register the source
+     * peer because the peer limit has already been reached; the relay loop still uses the
+     * existing intercom peers. */
+    (void)bluetooth_connect_peer(runtime, source_peer);
 
     runtime->packets_received++;
     runtime->last_source_peer = source_peer;
