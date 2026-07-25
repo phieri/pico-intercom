@@ -1,8 +1,13 @@
+#include "bluetooth.h"
 #include "intercom.h"
+#include "pairings.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 struct relay_context {
     size_t calls;
@@ -22,6 +27,7 @@ static void relay_callback(void *context, uint8_t source_peer, uint8_t target_pe
 
 int main(void) {
     intercom_state_t state;
+    bluetooth_runtime_t runtime = {0};
     struct relay_context ctx = {0};
     static const uint8_t payload[] = {0x01, 0x02, 0x03};
 
@@ -43,6 +49,39 @@ int main(void) {
                                   &ctx);
     assert(relayed == 0U);
     assert(ctx.calls == 2U);
+
+    intercom_set_ptt(&state, true);
+    bluetooth_init(&runtime, &state);
+    bluetooth_handle_audio(&runtime, 1U, payload, sizeof(payload));
+    assert(runtime.packets_received == 1U);
+    assert(runtime.last_source_peer == 1U);
+    assert(runtime.last_payload_len == sizeof(payload));
+    assert(runtime.last_relay_count == 2U);
+    assert(runtime.relay_invocations == 2U);
+
+    intercom_set_ptt(&state, false);
+    bluetooth_handle_audio(&runtime, 2U, payload, sizeof(payload));
+    assert(runtime.packets_received == 2U);
+    assert(runtime.last_relay_count == 0U);
+    assert(runtime.relay_invocations == 2U);
+
+    pairing_store_t store = {0};
+    pairing_t persisted[8] = {{0}};
+    pairing_t new_pairing = {.peer_id = 4U, .name = "headset-4"};
+    size_t persisted_count = 0U;
+
+    if (remove("pairings_test.txt") != 0 && errno != ENOENT) {
+        assert(false);
+    }
+
+    assert(pairing_store_init(&store, "pairings_test.txt"));
+    assert(pairing_store_clear(&store));
+    assert(pairing_store_save(&store, &new_pairing));
+    persisted_count = 0U;
+    assert(pairing_store_load(&store, persisted, &persisted_count));
+    assert(persisted_count == 1U);
+    assert(persisted[0].peer_id == 4U);
+    assert(strcmp(persisted[0].name, "headset-4") == 0);
 
     return 0;
 }

@@ -15,6 +15,10 @@ typedef struct {
     intercom_state_t *intercom;
     bool initialized;
     size_t last_relay_count;
+    size_t relay_invocations;
+    size_t packets_received;
+    uint8_t last_source_peer;
+    size_t last_payload_len;
 } bluetooth_runtime_t;
 
 void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom);

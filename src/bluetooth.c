@@ -11,7 +11,7 @@ static void bluetooth_relay(void *context, uint8_t source_peer, uint8_t target_p
     (void)payload_len;
 
     if (runtime != NULL) {
-        runtime->last_relay_count++;
+        runtime->relay_invocations++;
     }
 }
 
@@ -31,7 +31,10 @@ void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
         return;
     }
 
-    runtime->last_relay_count = intercom_rebroadcast(runtime->intercom, source_peer,
-                                                    payload, payload_len,
-                                                    bluetooth_relay, runtime);
+    runtime->packets_received++;
+    runtime->last_source_peer = source_peer;
+    runtime->last_payload_len = payload_len;
+
+    runtime->last_relay_count = intercom_rebroadcast(
+        runtime->intercom, source_peer, payload, payload_len, bluetooth_relay, runtime);
 }
