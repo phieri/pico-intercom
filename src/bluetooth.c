@@ -1,5 +1,10 @@
 #include "bluetooth.h"
 
+#ifdef PICO_INTERCOM_TARGET
+#include "pico/btstack_cyw43.h"
+#include "pico/cyw43_arch.h"
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -131,6 +136,21 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
     runtime->enabled = true;
     runtime->advertising = true;
     runtime->scanning = true;
+
+#ifdef PICO_INTERCOM_TARGET
+    if (cyw43_arch_init() != 0) {
+        fprintf(stderr, "WARNING: failed to initialize CYW43 architecture for Pico wireless support\n");
+        runtime->initialized = false;
+        return;
+    }
+
+    if (!btstack_cyw43_init(NULL)) {
+        fprintf(stderr, "WARNING: failed to initialize BTstack CYW43 integration\n");
+        runtime->initialized = false;
+        return;
+    }
+#endif
+
     runtime->initialized = true;
 }
 
