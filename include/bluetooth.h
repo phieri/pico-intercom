@@ -61,6 +61,7 @@ bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled);
 bool bluetooth_enable(bluetooth_runtime_t *runtime);
 bool bluetooth_disable(bluetooth_runtime_t *runtime);
 bool bluetooth_toggle(bluetooth_runtime_t *runtime);
+bool bluetooth_runtime_is_operational(const bluetooth_runtime_t *runtime);
 bool bluetooth_is_enabled(const bluetooth_runtime_t *runtime);
 bool bluetooth_connect(bluetooth_runtime_t *runtime, uint8_t peer_id);
 bool bluetooth_disconnect(bluetooth_runtime_t *runtime, uint8_t peer_id);
