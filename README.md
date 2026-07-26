@@ -33,4 +33,4 @@ cmake -S . -B build -DPICO_BOARD=pico2_w -DPICO_SDK_PATH=/path/to/pico-sdk
 cmake --build build
 ```
 
-The build produces a `.uf2` image for flashing to a Raspberry Pi Pico 2 W board.
+The build produces a `.uf2` image for flashing to a Raspberry Pi Pico 2 W board. The firmware target links against the Pico SDK's Bluetooth integration libraries (`pico_btstack` and `pico_btstack_cyw43`) and initializes the CYW43/BTstack stack during startup so the board can bring up its wireless stack before the intercom runtime is used.

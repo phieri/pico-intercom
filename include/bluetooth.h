@@ -33,6 +33,10 @@ typedef struct {
     bool enabled;
     bool advertising;
     bool scanning;
+    /* Tracks whether the target-specific wireless platform was initialized successfully. */
+    bool platform_initialized;
+    /* Tracks whether the target-specific wireless platform failed during startup. */
+    bool platform_error;
     size_t last_relay_count;
     size_t relay_invocations;
     size_t packets_received;

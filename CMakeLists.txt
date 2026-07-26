@@ -45,7 +45,7 @@ else()
     endif()
 
     add_executable(pico_intercom src/main.c)
-    target_link_libraries(pico_intercom PRIVATE intercom_core pico_stdlib)
+    target_link_libraries(pico_intercom PRIVATE intercom_core pico_stdlib pico_btstack pico_btstack_cyw43)
     target_compile_definitions(pico_intercom PRIVATE PICO_INTERCOM_TARGET=1)
 
     pico_enable_stdio_usb(pico_intercom 1)

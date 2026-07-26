@@ -1,8 +1,36 @@
 #include "bluetooth.h"
 
+#ifdef PICO_INTERCOM_TARGET
+#include "pico/btstack_cyw43.h"
+#include "pico/cyw43_arch.h"
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
+
+#ifdef PICO_INTERCOM_TARGET
+static bool bluetooth_platform_init(bluetooth_runtime_t *runtime) {
+    if (runtime == NULL) {
+        return false;
+    }
+
+    if (cyw43_arch_init() != 0) {
+        fprintf(stderr, "WARNING: failed to initialize CYW43 architecture for Pico wireless support\n");
+        runtime->platform_error = true;
+        return false;
+    }
+
+    if (!btstack_cyw43_init(NULL)) {
+        fprintf(stderr, "WARNING: failed to initialize BTstack CYW43 integration\n");
+        runtime->platform_error = true;
+        return false;
+    }
+
+    runtime->platform_initialized = true;
+    return true;
+}
+#endif
 
 typedef struct {
     const char *alias;
@@ -128,6 +156,16 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
 
     memset(runtime, 0, sizeof(*runtime));
     runtime->intercom = intercom;
+
+#ifdef PICO_INTERCOM_TARGET
+    {
+        bool platform_ready = bluetooth_platform_init(runtime);
+        if (!platform_ready) {
+            return;
+        }
+    }
+#endif
+
     runtime->enabled = true;
     runtime->advertising = true;
     runtime->scanning = true;
@@ -135,7 +173,8 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
 }
 
 bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
-    if (runtime == NULL) {
+    bool runtime_ready = runtime != NULL && (runtime->initialized || runtime->platform_initialized);
+    if (!runtime_ready) {
         return false;
     }
 
