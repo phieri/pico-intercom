@@ -1,6 +1,0 @@
-/home/runner/work/pico-intercom/pico-intercom/build-warn/CMakeFiles/intercom_core.dir
-/home/runner/work/pico-intercom/pico-intercom/build-warn/CMakeFiles/pico_intercom_app.dir
-/home/runner/work/pico-intercom/pico-intercom/build-warn/CMakeFiles/intercom_tests.dir
-/home/runner/work/pico-intercom/pico-intercom/build-warn/CMakeFiles/test.dir
-/home/runner/work/pico-intercom/pico-intercom/build-warn/CMakeFiles/edit_cache.dir
-/home/runner/work/pico-intercom/pico-intercom/build-warn/CMakeFiles/rebuild_cache.dir

@@ -1,1 +1,0 @@
-/usr/bin/cc -Wall -Wextra -Wpedantic -Wl,--dependency-file=CMakeFiles/intercom_tests.dir/link.d CMakeFiles/intercom_tests.dir/tests/test_intercom.c.o -o intercom_tests  libintercom_core.a

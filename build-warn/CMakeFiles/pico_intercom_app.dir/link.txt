@@ -1,1 +1,0 @@
-/usr/bin/cc -Wall -Wextra -Wpedantic -Wl,--dependency-file=CMakeFiles/pico_intercom_app.dir/link.d CMakeFiles/pico_intercom_app.dir/src/main.c.o -o pico_intercom_app  libintercom_core.a

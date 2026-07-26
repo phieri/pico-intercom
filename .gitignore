@@ -1,4 +1,5 @@
 build/
+build-warn/
 .vscode/
 *.swp
 *.swo
