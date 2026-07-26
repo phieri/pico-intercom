@@ -53,6 +53,10 @@ static bool bluetooth_runtime_is_ready(const bluetooth_runtime_t *runtime) {
     return runtime != NULL && runtime->initialized;
 }
 
+bool bluetooth_runtime_is_operational(const bluetooth_runtime_t *runtime) {
+    return runtime != NULL && runtime->initialized && runtime->enabled;
+}
+
 static bool bluetooth_has_pending_target(const bluetooth_runtime_t *runtime, uint8_t target_peer) {
     for (size_t index = 0; index < runtime->pending_relay_target_count; ++index) {
         if (runtime->relay_targets[index] == target_peer) {
@@ -293,7 +297,7 @@ bool bluetooth_handle_command(bluetooth_runtime_t *runtime, const char *command,
 
 void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
                            const uint8_t *payload, size_t payload_len) {
-    if (!bluetooth_runtime_is_ready(runtime) || !runtime->enabled) {
+    if (!bluetooth_runtime_is_operational(runtime)) {
         return;
     }
 

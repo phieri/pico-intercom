@@ -20,7 +20,7 @@ A practical pairing flow for this model is:
 
 1. Put the headphones you want to use into pairing mode and keep them near the Pico.
 2. Power on the Pico intercom firmware and make the runtime available over a simple serial or command interface.
-3. Enable Bluetooth and register the headset as a peer using the runtime's `pair`/`connect` commands (for example `pair 2` or `connect 2`).
+3. Enable Bluetooth and register the headset as a peer using the runtime's `pair`/`connect` commands (for example `pair 2` or `connect 2`). Choose a unique numeric peer ID for each headset; `2` is just an example. The runtime already exposes `bluetooth_handle_command()` and `bluetooth_execute_command()` helpers in `include/bluetooth.h` and `src/bluetooth.c` to parse and run those command aliases.
 4. Keep the intercom in PTT mode while speaking; audio is rebroadcast to the other connected headsets automatically.
 5. Use `disconnect`/`unpair` when you want to remove a headset from the session.
 

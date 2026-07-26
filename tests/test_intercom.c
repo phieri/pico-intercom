@@ -95,6 +95,31 @@ int main(void) {
     assert(runtime.last_relay_payload_len == sizeof(payload));
     assert(memcmp(runtime.last_relay_payload, payload, sizeof(payload)) == 0);
 
+    bluetooth_runtime_t runtime_to_disable = {0};
+    bluetooth_init(&runtime_to_disable, &state);
+    assert(bluetooth_runtime_is_operational(&runtime_to_disable));
+    assert(bluetooth_disable(&runtime_to_disable));
+    assert(!bluetooth_is_enabled(&runtime_to_disable));
+    assert(!runtime_to_disable.enabled);
+    assert(!bluetooth_runtime_is_operational(&runtime_to_disable));
+    assert(!bluetooth_runtime_is_operational(NULL));
+    const size_t initial_packets = runtime_to_disable.packets_received;
+    const size_t initial_relay_count = runtime_to_disable.last_relay_count;
+    const size_t initial_relay_payload_len = runtime_to_disable.last_relay_payload_len;
+    const uint8_t initial_source_peer = runtime_to_disable.last_source_peer;
+    const size_t initial_payload_len = runtime_to_disable.last_payload_len;
+    uint8_t initial_relay_payload_buf[BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN] = {0};
+    memcpy(initial_relay_payload_buf, runtime_to_disable.last_relay_payload,
+           sizeof(initial_relay_payload_buf));
+    bluetooth_handle_audio(&runtime_to_disable, 5U, payload, sizeof(payload));
+    assert(runtime_to_disable.packets_received == initial_packets);
+    assert(runtime_to_disable.last_source_peer == initial_source_peer);
+    assert(runtime_to_disable.last_payload_len == initial_payload_len);
+    assert(runtime_to_disable.last_relay_count == initial_relay_count);
+    assert(runtime_to_disable.last_relay_payload_len == initial_relay_payload_len);
+    assert(memcmp(runtime_to_disable.last_relay_payload, initial_relay_payload_buf,
+                  sizeof(runtime_to_disable.last_relay_payload)) == 0);
+
     bluetooth_runtime_t invalid_runtime = {0};
     assert(!bluetooth_toggle(&invalid_runtime));
     assert(!bluetooth_connect_peer(&invalid_runtime, 5U));
