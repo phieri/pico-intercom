@@ -5,13 +5,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "bluetooth_classic.h"
 #include "intercom.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN 256U
 
 typedef enum {
     BLUETOOTH_COMMAND_NONE = 0,
@@ -75,6 +74,12 @@ typedef struct {
     uint32_t last_error_code;
     bluetooth_command_id_t last_command;
     uint8_t last_peer_id;
+    size_t transport_packets_queued;
+    size_t transport_packets_delivered;
+    size_t transport_packets_dropped;
+    uint8_t last_transport_source_peer;
+    uint8_t last_transport_target_peer;
+    bluetooth_classic_stack_t classic_stack;
 } bluetooth_runtime_t;
 
 void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom);
