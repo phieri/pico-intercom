@@ -20,6 +20,8 @@ typedef enum {
     BLUETOOTH_COMMAND_TOGGLE,
     BLUETOOTH_COMMAND_CONNECT,
     BLUETOOTH_COMMAND_DISCONNECT,
+    /* PAIR/UNPAIR are distinct enum values that are treated the same as
+     * CONNECT/DISCONNECT in the command executor. */
     BLUETOOTH_COMMAND_PAIR,
     BLUETOOTH_COMMAND_UNPAIR,
     BLUETOOTH_COMMAND_STATUS
@@ -58,11 +60,6 @@ bool bluetooth_toggle(bluetooth_runtime_t *runtime);
 bool bluetooth_is_enabled(const bluetooth_runtime_t *runtime);
 bool bluetooth_connect(bluetooth_runtime_t *runtime, uint8_t peer_id);
 bool bluetooth_disconnect(bluetooth_runtime_t *runtime, uint8_t peer_id);
-bool bluetooth_command_enable(bluetooth_runtime_t *runtime);
-bool bluetooth_command_disable(bluetooth_runtime_t *runtime);
-bool bluetooth_command_toggle(bluetooth_runtime_t *runtime);
-bool bluetooth_command_connect(bluetooth_runtime_t *runtime, uint8_t peer_id);
-bool bluetooth_command_disconnect(bluetooth_runtime_t *runtime, uint8_t peer_id);
 bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id);
 bool bluetooth_disconnect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id);
 bool bluetooth_is_peer_connected(const bluetooth_runtime_t *runtime, uint8_t peer_id);
