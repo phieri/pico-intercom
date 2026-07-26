@@ -29,6 +29,7 @@ static bool pairing_store_is_duplicate(const pairing_t *pairings, size_t count,
     return false;
 }
 
+#if !defined(PICO_INTERCOM_TARGET)
 static bool pairing_store_read_handle(FILE *handle, pairing_t *pairings, size_t *count) {
     if (handle == NULL || pairings == NULL || count == NULL) {
         return false;
@@ -63,6 +64,7 @@ static bool pairing_store_read_handle(FILE *handle, pairing_t *pairings, size_t 
     *count = loaded;
     return true;
 }
+#endif
 
 #if PICO_INTERCOM_HAS_LITTLEFS
 static bool pairing_store_littlefs_save(const pairing_store_t *store, const pairing_t *pairing) {
@@ -112,6 +114,11 @@ bool pairing_store_save(pairing_store_t *store, const pairing_t *pairing) {
     }
 #endif
 
+#if defined(PICO_INTERCOM_TARGET)
+    (void)store;
+    (void)pairing;
+    return true;
+#else
     FILE *handle = fopen(store->path, "a+");
     if (handle == NULL) {
         return false;
@@ -124,11 +131,13 @@ bool pairing_store_save(pairing_store_t *store, const pairing_t *pairing) {
         return false;
     }
 
+#if !defined(PICO_INTERCOM_TARGET)
     if (pairing_store_read_handle(handle, existing, &count) &&
         pairing_store_is_duplicate(existing, count, pairing->peer_id)) {
         fclose(handle);
         return true;
     }
+#endif
 
     if (fseek(handle, 0, SEEK_END) != 0) {
         fclose(handle);
@@ -142,6 +151,7 @@ bool pairing_store_save(pairing_store_t *store, const pairing_t *pairing) {
 
     fclose(handle);
     return true;
+#endif
 }
 
 bool pairing_store_load(pairing_store_t *store, pairing_t *pairings, size_t *count) {
@@ -155,19 +165,29 @@ bool pairing_store_load(pairing_store_t *store, pairing_t *pairings, size_t *cou
     }
 #endif
 
+#if defined(PICO_INTERCOM_TARGET)
+    if (pairings != NULL) {
+        memset(pairings, 0, sizeof(pairings[0]) * PAIRING_MAX_COUNT);
+    }
+    *count = 0U;
+    return true;
+#else
     FILE *handle = fopen(store->path, "r");
     if (handle == NULL) {
         *count = 0U;
         return false;
     }
 
+#if !defined(PICO_INTERCOM_TARGET)
     if (!pairing_store_read_handle(handle, pairings, count)) {
         fclose(handle);
         return false;
     }
+#endif
 
     fclose(handle);
     return true;
+#endif
 }
 
 bool pairing_store_clear(pairing_store_t *store) {
@@ -181,9 +201,14 @@ bool pairing_store_clear(pairing_store_t *store) {
     }
 #endif
 
+#if defined(PICO_INTERCOM_TARGET)
+    (void)store;
+    return true;
+#else
     if (remove(store->path) != 0) {
         return errno == ENOENT;
     }
 
     return true;
+#endif
 }

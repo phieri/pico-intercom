@@ -3,11 +3,18 @@ cmake_minimum_required(VERSION 3.21)
 option(PICO_INTERCOM_FORCE_HOST_BUILD "Build a host-side demo instead of the Pico firmware" OFF)
 option(PICO_INTERCOM_BUILD_HOST_TESTS "Build host-side routing tests" ON)
 
-project(pico_intercom C CXX ASM)
+if(PICO_INTERCOM_FORCE_HOST_BUILD)
+    project(pico_intercom C CXX ASM)
+else()
+    include(pico_sdk_import.cmake)
+    pico_sdk_init()
+    project(pico_intercom C CXX ASM)
+endif()
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS OFF)
+# The Pico SDK uses GNU-style extensions in its runtime sources, so enable them here.
+set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_CXX_STANDARD 17)
 
 add_library(intercom_core STATIC
@@ -17,6 +24,10 @@ add_library(intercom_core STATIC
 )
 
 target_include_directories(intercom_core PUBLIC include)
+
+if(NOT PICO_INTERCOM_FORCE_HOST_BUILD)
+    target_compile_definitions(intercom_core PRIVATE PICO_INTERCOM_TARGET=1)
+endif()
 
 if(PICO_INTERCOM_FORCE_HOST_BUILD)
     add_executable(pico_intercom_app src/main.c)
@@ -32,9 +43,6 @@ else()
     if(NOT DEFINED PICO_BOARD OR PICO_BOARD STREQUAL "")
         set(PICO_BOARD pico2_w CACHE STRING "Board type" FORCE)
     endif()
-
-    include(pico_sdk_import.cmake)
-    pico_sdk_init()
 
     add_executable(pico_intercom src/main.c)
     target_link_libraries(pico_intercom PRIVATE intercom_core pico_stdlib)
