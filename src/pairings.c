@@ -162,6 +162,8 @@ static bool pairing_store_flash_write_image(const pairing_flash_image_t *image) 
     restore_interrupts(interrupts);
 
     if (erase_status != 0 || program_status != 0) {
+        fprintf(stderr, "WARNING: flash pairing write failed (erase=%d program=%d)\n",
+                erase_status, program_status);
         return false;
     }
 

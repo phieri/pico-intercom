@@ -88,9 +88,9 @@ int main(void) {
     assert(pairing_runtime.last_peer_id == TEST_PAIRING_PEER_ID);
     assert(pairing_runtime.pairing_attempts == 1U);
     assert(pairing_runtime.connection_attempts == 1U);
-    bluetooth_peer_state_t peer_state = BLUETOOTH_PEER_STATE_DISCONNECTED;
-    assert(bluetooth_get_peer_state(&pairing_runtime, TEST_PAIRING_PEER_ID, &peer_state));
-    assert(peer_state == BLUETOOTH_PEER_STATE_CONNECTED);
+    bluetooth_peer_state_t queried_peer_state = BLUETOOTH_PEER_STATE_DISCONNECTED;
+    assert(bluetooth_get_peer_state(&pairing_runtime, TEST_PAIRING_PEER_ID, &queried_peer_state));
+    assert(queried_peer_state == BLUETOOTH_PEER_STATE_CONNECTED);
     assert(bluetooth_execute_command(&runtime, BLUETOOTH_COMMAND_CONNECT, 4U));
     assert(bluetooth_is_peer_connected(&runtime, 4U));
     assert(runtime.command_count == 1U);
@@ -181,9 +181,9 @@ int main(void) {
     assert(!bluetooth_is_peer_connected(&runtime, 4U));
     assert(!bluetooth_disconnect_peer(&runtime, 99U));
     assert(runtime.connected_peer_count == 2U);
-    assert(bluetooth_get_peer_state(&runtime, 2U, &peer_state));
-    assert(peer_state == BLUETOOTH_PEER_STATE_CONNECTED);
-    assert(!bluetooth_get_peer_state(&runtime, 99U, &peer_state));
+    assert(bluetooth_get_peer_state(&runtime, 2U, &queried_peer_state));
+    assert(queried_peer_state == BLUETOOTH_PEER_STATE_CONNECTED);
+    assert(!bluetooth_get_peer_state(&runtime, 99U, &queried_peer_state));
 
     intercom_state_t limit_state;
     bluetooth_runtime_t limit_runtime = {0};

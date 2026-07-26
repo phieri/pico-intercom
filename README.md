@@ -7,7 +7,7 @@ pico-intercom is a Raspberry Pi Pico 2 W firmware project for a local Bluetooth 
 The firmware now provides:
 
 - A modular intercom routing core that relays audio packets to connected peers while PTT is active.
-- A Bluetooth runtime with explicit peer states (`disconnected`, `connecting`, `connected`, `disconnecting`) and error tracking for failed connections and disconnects.
+- A Bluetooth runtime with explicit peer states (`disconnected`/`connected`) and error tracking for failed connections and disconnects.
 - Flash-backed pairing persistence for Pico targets, with write validation instead of best-effort storage.
 - A practical pairing flow driven by the onboard button and status LED.
 - Host-side tests that exercise the routing core, Bluetooth runtime, and pairing persistence without requiring hardware.
@@ -31,8 +31,7 @@ On boot, the firmware:
 
 When a pairing is initiated, the runtime:
 
-- marks the target peer as `connecting`,
-- attempts to add the peer to the runtime's connected-peer list,
+- registers the target peer in the runtime's connected-peer list,
 - records the resulting connection state,
 - and persists the pairing metadata to flash.
 

@@ -63,6 +63,8 @@ typedef struct {
     size_t pairing_attempts;
     size_t connection_attempts;
     size_t disconnect_attempts;
+    size_t successful_connections;
+    size_t successful_disconnections;
     size_t failed_connections;
     size_t failed_disconnections;
     bool pairing_in_progress;
@@ -90,6 +92,7 @@ bool bluetooth_is_peer_connected(const bluetooth_runtime_t *runtime, uint8_t pee
 bool bluetooth_get_peer_state(const bluetooth_runtime_t *runtime, uint8_t peer_id,
                               bluetooth_peer_state_t *state);
 const char *bluetooth_peer_state_name(bluetooth_peer_state_t state);
+const char *bluetooth_error_name(uint32_t error_code);
 bool bluetooth_execute_command(bluetooth_runtime_t *runtime, bluetooth_command_id_t command,
                               uint8_t peer_id);
 bool bluetooth_handle_command(bluetooth_runtime_t *runtime, const char *command,
