@@ -156,9 +156,6 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
 
     memset(runtime, 0, sizeof(*runtime));
     runtime->intercom = intercom;
-    runtime->enabled = false;
-    runtime->advertising = false;
-    runtime->scanning = false;
 
 #ifdef PICO_INTERCOM_TARGET
     if (!bluetooth_platform_init(runtime)) {
