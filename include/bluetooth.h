@@ -11,6 +11,8 @@
 extern "C" {
 #endif
 
+#define BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN 256U
+
 typedef struct {
     intercom_state_t *intercom;
     bool initialized;
@@ -19,6 +21,13 @@ typedef struct {
     size_t packets_received;
     uint8_t last_source_peer;
     size_t last_payload_len;
+    uint8_t last_relay_source_peer;
+    uint8_t last_relay_target;
+    uint8_t relay_targets[INTERCOM_MAX_PEERS];
+    size_t relay_target_count;
+    size_t pending_relay_target_count;
+    uint8_t last_relay_payload[BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN];
+    size_t last_relay_payload_len;
     uint8_t connected_peers[INTERCOM_MAX_PEERS];
     size_t connected_peer_count;
 } bluetooth_runtime_t;

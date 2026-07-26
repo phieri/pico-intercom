@@ -58,6 +58,13 @@ int main(void) {
     assert(runtime.last_payload_len == sizeof(payload));
     assert(runtime.last_relay_count == 2U);
     assert(runtime.relay_invocations == 2U);
+    assert(runtime.relay_target_count == 2U);
+    assert(runtime.relay_targets[0] == 2U);
+    assert(runtime.relay_targets[1] == 3U);
+    assert(runtime.last_relay_source_peer == 1U);
+    assert(runtime.last_relay_target == 3U);
+    assert(runtime.last_relay_payload_len == sizeof(payload));
+    assert(memcmp(runtime.last_relay_payload, payload, sizeof(payload)) == 0);
 
     intercom_set_ptt(&state, false);
     bluetooth_handle_audio(&runtime, 2U, payload, sizeof(payload));
