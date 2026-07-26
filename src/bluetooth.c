@@ -2,6 +2,33 @@
 
 #include <string.h>
 
+static void bluetooth_record_relay(bluetooth_runtime_t *runtime, uint8_t source_peer,
+                                   uint8_t target_peer, const uint8_t *payload,
+                                   size_t payload_len) {
+    if (runtime == NULL) {
+        return;
+    }
+
+    runtime->relay_invocations++;
+    runtime->last_relay_source_peer = source_peer;
+    runtime->last_relay_target = target_peer;
+
+    if (runtime->relay_target_count < INTERCOM_MAX_PEERS) {
+        runtime->relay_targets[runtime->relay_target_count++] = target_peer;
+    }
+
+    runtime->last_relay_payload_len = payload_len;
+    if (runtime->last_relay_payload_len > BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN) {
+        runtime->last_relay_payload_len = BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN;
+    }
+
+    if (runtime->last_relay_payload_len > 0U && payload != NULL) {
+        memcpy(runtime->last_relay_payload, payload, runtime->last_relay_payload_len);
+    } else {
+        memset(runtime->last_relay_payload, 0, sizeof(runtime->last_relay_payload));
+    }
+}
+
 static size_t bluetooth_find_peer_index(const bluetooth_runtime_t *runtime, uint8_t peer_id) {
     if (runtime == NULL) {
         return 0U;
@@ -22,15 +49,8 @@ static bool bluetooth_has_peer(const bluetooth_runtime_t *runtime, uint8_t peer_
 
 static void bluetooth_relay(void *context, uint8_t source_peer, uint8_t target_peer,
                             const uint8_t *payload, size_t payload_len) {
-    bluetooth_runtime_t *runtime = (bluetooth_runtime_t *)context;
-    (void)source_peer;
-    (void)target_peer;
-    (void)payload;
-    (void)payload_len;
-
-    if (runtime != NULL) {
-        runtime->relay_invocations++;
-    }
+    bluetooth_record_relay((bluetooth_runtime_t *)context, source_peer, target_peer, payload,
+                           payload_len);
 }
 
 void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
@@ -103,6 +123,11 @@ void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
     runtime->packets_received++;
     runtime->last_source_peer = source_peer;
     runtime->last_payload_len = payload_len;
+    runtime->relay_target_count = 0U;
+    runtime->last_relay_source_peer = source_peer;
+    runtime->last_relay_target = 0U;
+    runtime->last_relay_payload_len = 0U;
+    memset(runtime->last_relay_payload, 0, sizeof(runtime->last_relay_payload));
 
     runtime->last_relay_count = intercom_rebroadcast(
         runtime->intercom, source_peer, payload, payload_len, bluetooth_relay, runtime);
