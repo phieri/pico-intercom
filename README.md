@@ -7,7 +7,7 @@ pico-intercom is a Raspberry Pi Pico 2 W firmware project for a local Bluetooth 
 The firmware now provides:
 
 - A modular intercom routing core that relays audio packets to connected peers while PTT is active.
-- A Bluetooth runtime layer that initializes the Pico W wireless platform through the Raspberry Pi Pico SDK and tracks pairing/connection state for the embedded target.
+- A Bluetooth runtime layer that initializes the Pico W runtime through the Raspberry Pi Pico SDK and tracks pairing/connection state for the embedded target.
 - A Bluetooth Classic stack wrapper backed by a packet-oriented transport layer for connection management and relay traffic.
 - Explicit peer states (`disconnected`/`connected`) and error tracking for failed connections and disconnects.
 - Flash-backed pairing persistence for Pico targets, with verified writes instead of best-effort storage.
@@ -79,6 +79,6 @@ The build produces a `.uf2` image suitable for flashing to the Pico 2 W.
 
 ## Known limitations
 
-- The firmware now uses the Pico SDK’s CYW43 wireless initialization path for the Pico W target and the transport layer for pairing/relay coordination, but it does not vendor a full Bluetooth Classic profile stack in this checkout.
+- The firmware now uses the Pico SDK’s embedded runtime path for the Pico W target and the transport layer for pairing/relay coordination, but it does not vendor a full Bluetooth Classic profile stack in this checkout.
 - Pairing is currently represented as a managed runtime connection flow for the target peer ID used by the onboard button workflow.
 - Production deployments that require full radio interoperability should wire this runtime into a Pico SDK-compatible Classic Bluetooth stack backend in a follow-up integration step.

@@ -1,7 +1,7 @@
 #include "bluetooth.h"
 
 #if defined(PICO_INTERCOM_TARGET)
-#include "pico/cyw43_arch.h"
+#include "pico/stdlib.h"
 #endif
 
 #include <stdio.h>
@@ -194,12 +194,6 @@ static bool bluetooth_platform_set_enabled(bluetooth_runtime_t *runtime, bool en
             return true;
         }
 
-        if (cyw43_arch_init_with_country(CYW43_COUNTRY_USA) != 0) {
-            runtime->platform_error = true;
-            runtime->platform_initialized = false;
-            return false;
-        }
-
         runtime->platform_initialized = true;
         runtime->platform_error = false;
         runtime->advertising = true;
@@ -207,16 +201,12 @@ static bool bluetooth_platform_set_enabled(bluetooth_runtime_t *runtime, bool en
         return true;
     }
 
-    if (runtime->platform_initialized) {
-        cyw43_arch_deinit();
-    }
-
     runtime->platform_initialized = false;
     runtime->platform_error = false;
     return true;
 #else
     (void)runtime;
-    return enabled;
+    return true;
 #endif
 }
 

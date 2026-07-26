@@ -29,7 +29,7 @@ target_include_directories(intercom_core PUBLIC include)
 
 if(NOT PICO_INTERCOM_FORCE_HOST_BUILD)
     target_compile_definitions(intercom_core PRIVATE PICO_INTERCOM_TARGET=1)
-    target_link_libraries(intercom_core PUBLIC pico_stdlib hardware_flash hardware_sync pico_cyw43_arch)
+    target_link_libraries(intercom_core PUBLIC pico_stdlib hardware_flash hardware_sync)
 endif()
 
 if(PICO_INTERCOM_FORCE_HOST_BUILD)
