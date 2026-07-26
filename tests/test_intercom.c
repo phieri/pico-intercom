@@ -122,6 +122,12 @@ int main(void) {
     assert(!runtime_to_disable.enabled);
     assert(!bluetooth_runtime_is_operational(&runtime_to_disable));
     assert(!bluetooth_runtime_is_operational(NULL));
+
+    bluetooth_runtime_t runtime_with_error = {0};
+    bluetooth_init(&runtime_with_error, &state);
+    runtime_with_error.platform_error = true;
+    assert(!bluetooth_runtime_is_operational(&runtime_with_error));
+
     const size_t initial_packets = runtime_to_disable.packets_received;
     const size_t initial_relay_count = runtime_to_disable.last_relay_count;
     const size_t initial_relay_payload_len = runtime_to_disable.last_relay_payload_len;

@@ -6,7 +6,8 @@ A small C project for a Raspberry Pi Pico 2 W that models a local Bluetooth audi
 
 - An intercom routing core that rebroadcasts audio from one connected headset to every other connected headset while PTT is active.
 - A simple Bluetooth runtime that records incoming audio packets, tracks connected headset peers, stores pairings, and relays audio while PTT is active.
-- A pairing persistence layer that saves connected headset pairings so they can be reloaded across boots; on Pico targets this path is intended to use LittleFS-backed storage.
+- A Pico-target pairing persistence layer that writes peer IDs and labels to a reserved flash region so pairings survive reboot and can be restored on startup.
+- A firmware entry point that uses the onboard button and status LED to trigger pairing, show connection state, and recover saved pairings automatically.
 - A Pico SDK-based CMake build path that matches the firmware workflow used in `phieri/viking-bio-pwa`.
 - A host-side test target that exercises the rebroadcast logic, Bluetooth shim, and pairing persistence without requiring the Pico toolchain.
 
@@ -18,11 +19,12 @@ The current firmware model keeps a small peer list and rebroadcasts any audio pa
 
 A practical pairing flow for this model is:
 
-1. Put the headphones you want to use into pairing mode and keep them near the Pico.
-2. Power on the Pico intercom firmware and make sure the device is ready to accept pairing.
-3. Press the Pico 2 W onboard button to initiate pairing with the nearby headset. Keep the headphones close to the Pico while the pairing completes.
-4. Keep the intercom in PTT mode while speaking; audio is rebroadcast to the other connected headsets automatically.
-5. Use the runtime's disconnect or unpair flow when you want to remove a headset from the session.
+1. Power on the Pico intercom firmware and let it boot into its idle state.
+2. Put the headphones you want to use into pairing mode and keep them near the Pico.
+3. Press the Pico 2 W onboard button to initiate pairing with the nearby headset. The status LED blinks while the request is active and stays solid once at least one peer is connected.
+4. If the pairing succeeds, the firmware persists the new pairing to flash and restores it automatically on the next boot.
+5. Keep the intercom in PTT mode while speaking; audio is rebroadcast to the other connected headsets automatically.
+6. Use the runtime's disconnect or unpair flow when you want to remove a headset from the session.
 
 The host-side tests and demo binary exercise the same pairing and relay flow, so you can validate the behavior locally before flashing hardware.
 
@@ -45,4 +47,4 @@ cmake -S . -B build -DPICO_BOARD=pico2_w -DPICO_SDK_PATH=/path/to/pico-sdk
 cmake --build build
 ```
 
-The build produces a `.uf2` image for flashing to a Raspberry Pi Pico 2 W board. The firmware target uses the Pico SDK's standard libraries and the intercom runtime's simple peer-pairing logic directly, without any extra Bluetooth shim layer.
+The build produces a `.uf2` image for flashing to a Raspberry Pi Pico 2 W board. The firmware target uses the Pico SDK's standard libraries and the intercom runtime's simple peer-pairing logic directly, with flash-backed persistence and a simple board interaction loop. The current implementation focuses on realistic firmware-state management and pairing recovery rather than a full wireless stack; the Bluetooth layer remains a practical embedded-runtime shim for the intercom logic.

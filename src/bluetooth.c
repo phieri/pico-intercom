@@ -54,7 +54,7 @@ static bool bluetooth_runtime_is_ready(const bluetooth_runtime_t *runtime) {
 }
 
 bool bluetooth_runtime_is_operational(const bluetooth_runtime_t *runtime) {
-    return runtime != NULL && runtime->initialized && runtime->enabled;
+    return runtime != NULL && runtime->initialized && runtime->enabled && !runtime->platform_error;
 }
 
 static bool bluetooth_has_pending_target(const bluetooth_runtime_t *runtime, uint8_t target_peer) {
@@ -139,6 +139,8 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
     runtime->enabled = true;
     runtime->advertising = true;
     runtime->scanning = true;
+    runtime->platform_initialized = true;
+    runtime->platform_error = false;
     runtime->initialized = true;
 }
 
