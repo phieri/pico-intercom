@@ -71,6 +71,20 @@ static bool pairing_store_copy_name(pairing_t *pairing, const char *name) {
 }
 
 #if !defined(PICO_INTERCOM_TARGET)
+static bool pairing_store_write_handle(FILE *handle, const pairing_t *pairings, size_t count) {
+    if (handle == NULL) {
+        return false;
+    }
+
+    for (size_t index = 0; index < count; ++index) {
+        if (fprintf(handle, "%u,%s\n", (unsigned)pairings[index].peer_id, pairings[index].name) < 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static bool pairing_store_read_handle(FILE *handle, pairing_t *pairings, size_t *count) {
     if (handle == NULL || pairings == NULL || count == NULL) {
         return false;
@@ -279,36 +293,55 @@ bool pairing_store_save(pairing_store_t *store, const pairing_t *pairing) {
     (void)pairing;
     return true;
 #else
-    FILE *handle = fopen(store->path, "a+");
-    if (handle == NULL) {
-        return false;
-    }
-
     pairing_t existing[PAIRING_MAX_COUNT] = {{0}};
     size_t count = 0U;
-    if (fseek(handle, 0, SEEK_SET) != 0) {
-        fclose(handle);
+    bool loaded = false;
+
+    FILE *read_handle = fopen(store->path, "r");
+    if (read_handle != NULL) {
+        loaded = pairing_store_read_handle(read_handle, existing, &count);
+        fclose(read_handle);
+        if (!loaded) {
+            return false;
+        }
+    } else if (errno != ENOENT) {
         return false;
     }
 
-    if (pairing_store_read_handle(handle, existing, &count) &&
-        pairing_store_is_duplicate(existing, count, pairing->peer_id)) {
-        fclose(handle);
-        return true;
+    pairing_t updated[PAIRING_MAX_COUNT] = {{0}};
+    size_t updated_count = 0U;
+    /* Rebuild the host-side store with a single entry per peer ID. */
+    for (size_t index = 0; index < count; ++index) {
+        if (pairing_store_is_duplicate(updated, updated_count, existing[index].peer_id)) {
+            continue;
+        }
+        updated[updated_count++] = existing[index];
     }
 
-    if (fseek(handle, 0, SEEK_END) != 0) {
-        fclose(handle);
+    bool replaced = false;
+    for (size_t index = 0; index < updated_count; ++index) {
+        if (updated[index].peer_id == pairing->peer_id) {
+            updated[index] = *pairing;
+            replaced = true;
+            break;
+        }
+    }
+
+    if (!replaced) {
+        if (updated_count >= PAIRING_MAX_COUNT) {
+            return false;
+        }
+        updated[updated_count++] = *pairing;
+    }
+
+    FILE *write_handle = fopen(store->path, "w");
+    if (write_handle == NULL) {
         return false;
     }
 
-    if (fprintf(handle, "%u,%s\n", (unsigned)pairing->peer_id, pairing->name) < 0) {
-        fclose(handle);
-        return false;
-    }
-
-    fclose(handle);
-    return true;
+    const bool written = pairing_store_write_handle(write_handle, updated, updated_count);
+    fclose(write_handle);
+    return written;
 #endif
 }
 

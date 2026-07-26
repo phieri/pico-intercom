@@ -287,9 +287,7 @@ int main(void) {
     pairing_t duplicate_pairing = {.peer_id = 4U, .name = "headset-4"};
     size_t persisted_count = 0U;
 
-    if (remove("pairings_test.txt") != 0 && errno != ENOENT) {
-        assert(false);
-    }
+    assert(remove_test_file("pairings_test.txt") == 0);
 
     assert(pairing_store_init(&store, "pairings_test.txt"));
     assert(pairing_store_clear(&store));
@@ -300,19 +298,32 @@ int main(void) {
     assert(persisted_count == 1U);
     assert(persisted[0].peer_id == 4U);
     assert(strcmp(persisted[0].name, "headset-4") == 0);
-    if (remove_test_file("pairings_test.txt") != 0) {
-        return 1;
-    }
+    assert(remove_test_file("pairings_test.txt") == 0);
 
     pairing_store_t missing_store = {0};
     pairing_t empty_pairings[8] = {{0}};
     size_t empty_count = 0U;
-    if (remove("missing_pairings_test.txt") != 0 && errno != ENOENT) {
-        assert(false);
-    }
+    assert(remove_test_file("missing_pairings_test.txt") == 0);
     assert(pairing_store_init(&missing_store, "missing_pairings_test.txt"));
     assert(pairing_store_load(&missing_store, empty_pairings, &empty_count));
     assert(empty_count == 0U);
+
+    pairing_store_t update_store = {0};
+    pairing_t update_pairing = {.peer_id = 5U, .name = "headset-5"};
+    pairing_t updated_pairing = {.peer_id = 5U, .name = "headset-5-updated"};
+    pairing_t loaded_updates[8] = {{0}};
+    size_t update_count = 0U;
+    assert(remove_test_file("pairings_update_test.txt") == 0);
+
+    assert(pairing_store_init(&update_store, "pairings_update_test.txt"));
+    assert(pairing_store_clear(&update_store));
+    assert(pairing_store_save(&update_store, &update_pairing));
+    assert(pairing_store_save(&update_store, &updated_pairing));
+    assert(pairing_store_load(&update_store, loaded_updates, &update_count));
+    assert(update_count == 1U);
+    assert(loaded_updates[0].peer_id == 5U);
+    assert(strcmp(loaded_updates[0].name, "headset-5-updated") == 0);
+    assert(remove_test_file("pairings_update_test.txt") == 0);
 
     pairing_store_t crlf_store = {0};
     pairing_t crlf_pairings[8] = {{0}};
