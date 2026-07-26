@@ -29,6 +29,26 @@ static bool pairing_store_is_duplicate(const pairing_t *pairings, size_t count,
     return false;
 }
 
+static void pairing_store_trim_newline(char *value) {
+    if (value == NULL) {
+        return;
+    }
+
+    size_t length = strlen(value);
+    if (length > 0U && value[length - 1U] == '\n') {
+        value[length - 1U] = '\0';
+    }
+}
+
+static bool pairing_store_copy_name(pairing_t *pairing, const char *name) {
+    if (pairing == NULL || name == NULL) {
+        return false;
+    }
+
+    int written = snprintf(pairing->name, sizeof(pairing->name), "%s", name);
+    return written >= 0 && (size_t)written < sizeof(pairing->name);
+}
+
 #if !defined(PICO_INTERCOM_TARGET)
 static bool pairing_store_read_handle(FILE *handle, pairing_t *pairings, size_t *count) {
     if (handle == NULL || pairings == NULL || count == NULL) {
@@ -50,14 +70,13 @@ static bool pairing_store_read_handle(FILE *handle, pairing_t *pairings, size_t 
         }
 
         char *name = separator + 1U;
-        size_t name_len = strlen(name);
-        if (name_len > 0U && name[name_len - 1U] == '\n') {
-            name[name_len - 1U] = '\0';
-        }
+        pairing_store_trim_newline(name);
 
         memset(&pairings[loaded], 0, sizeof(pairings[loaded]));
         pairings[loaded].peer_id = (uint8_t)peer_id;
-        snprintf(pairings[loaded].name, sizeof(pairings[loaded].name), "%s", name);
+        if (!pairing_store_copy_name(&pairings[loaded], name)) {
+            continue;
+        }
         loaded++;
     }
 
@@ -175,7 +194,7 @@ bool pairing_store_load(pairing_store_t *store, pairing_t *pairings, size_t *cou
     FILE *handle = fopen(store->path, "r");
     if (handle == NULL) {
         *count = 0U;
-        return false;
+        return errno == ENOENT;
     }
 
 #if !defined(PICO_INTERCOM_TARGET)

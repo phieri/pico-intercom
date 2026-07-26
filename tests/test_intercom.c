@@ -87,6 +87,7 @@ int main(void) {
     pairing_store_t store = {0};
     pairing_t persisted[8] = {{0}};
     pairing_t new_pairing = {.peer_id = 4U, .name = "headset-4"};
+    pairing_t duplicate_pairing = {.peer_id = 4U, .name = "headset-4"};
     size_t persisted_count = 0U;
 
     if (remove("pairings_test.txt") != 0 && errno != ENOENT) {
@@ -96,11 +97,22 @@ int main(void) {
     assert(pairing_store_init(&store, "pairings_test.txt"));
     assert(pairing_store_clear(&store));
     assert(pairing_store_save(&store, &new_pairing));
+    assert(pairing_store_save(&store, &duplicate_pairing));
     persisted_count = 0U;
     assert(pairing_store_load(&store, persisted, &persisted_count));
     assert(persisted_count == 1U);
     assert(persisted[0].peer_id == 4U);
     assert(strcmp(persisted[0].name, "headset-4") == 0);
+
+    pairing_store_t missing_store = {0};
+    pairing_t empty_pairings[8] = {{0}};
+    size_t empty_count = 0U;
+    if (remove("missing_pairings_test.txt") != 0 && errno != ENOENT) {
+        assert(false);
+    }
+    assert(pairing_store_init(&missing_store, "missing_pairings_test.txt"));
+    assert(pairing_store_load(&missing_store, empty_pairings, &empty_count));
+    assert(empty_count == 0U);
 
     return 0;
 }
