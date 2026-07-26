@@ -161,9 +161,6 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
     {
         bool platform_ready = bluetooth_platform_init(runtime);
         if (!platform_ready) {
-            runtime->enabled = false;
-            runtime->advertising = false;
-            runtime->scanning = false;
             return;
         }
     }
@@ -176,7 +173,8 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
 }
 
 bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
-    if (runtime == NULL || (!runtime->initialized && !runtime->platform_initialized)) {
+    bool runtime_ready = runtime != NULL && (runtime->initialized || runtime->platform_initialized);
+    if (!runtime_ready) {
         return false;
     }
 
