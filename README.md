@@ -1,38 +1,55 @@
 # pico-intercom
 
-A small C project for a Raspberry Pi Pico 2 W that models a local Bluetooth audio intercom.
+pico-intercom is a Raspberry Pi Pico 2 W firmware project for a local Bluetooth audio intercom. The codebase has been refactored from a demo-style simulation into a more production-oriented embedded runtime with explicit connection state handling, persistent pairing storage, and a hardware-driven pairing workflow.
 
-## What is included
+## What changed
 
-- An intercom routing core that rebroadcasts audio from one connected headset to every other connected headset while PTT is active.
-- A simple Bluetooth runtime that records incoming audio packets, tracks connected headset peers, stores pairings, and relays audio while PTT is active.
-- A Pico-target pairing persistence layer that writes peer IDs and labels to a reserved flash region so pairings survive reboot and can be restored on startup.
-- A firmware entry point that uses the onboard button and status LED to trigger pairing, show connection state, and recover saved pairings automatically.
-- A Pico SDK-based CMake build path that matches the firmware workflow used in `phieri/viking-bio-pwa`.
-- A host-side test target that exercises the rebroadcast logic, Bluetooth shim, and pairing persistence without requiring the Pico toolchain.
+The firmware now provides:
 
-## How it works
+- A modular intercom routing core that relays audio packets to connected peers while PTT is active.
+- A Bluetooth runtime with explicit peer states (`disconnected`/`connected`) and error tracking for failed connections and disconnects.
+- Flash-backed pairing persistence for Pico targets, with write validation instead of best-effort storage.
+- A practical pairing flow driven by the onboard button and status LED.
+- Host-side tests that exercise the routing core, Bluetooth runtime, and pairing persistence without requiring hardware.
 
-The current firmware model keeps a small peer list and rebroadcasts any audio payload to all peers except the source when the intercom is enabled and the PTT state is active. This gives a simple, self-contained model of a local audio intercom where connected headsets relay audio to one another.
+## Hardware requirements
 
-## Pairing headphones in practice
+- Raspberry Pi Pico 2 W board
+- USB cable for flashing and serial console
+- Optional: a Bluetooth headset or test device that can be paired to the Pico runtime conceptually
 
-A practical pairing flow for this model is:
+The firmware uses the Pico SDK's GPIO and flash support and is designed to run from the Pico 2 W's onboard flash.
 
-1. Power on the Pico intercom firmware and let it boot into its idle state.
-2. Put the headphones you want to use into pairing mode and keep them near the Pico.
-3. Press the Pico 2 W onboard button to initiate pairing with the nearby headset. The status LED blinks while the request is active and stays solid once at least one peer is connected.
-4. If the pairing succeeds, the firmware persists the new pairing to flash and restores it automatically on the next boot.
-5. Keep the intercom in PTT mode while speaking; audio is rebroadcast to the other connected headsets automatically.
-6. Use the runtime's disconnect or unpair flow when you want to remove a headset from the session.
+## Firmware behavior
 
-The host-side tests and demo binary exercise the same pairing and relay flow, so you can validate the behavior locally before flashing hardware.
+On boot, the firmware:
 
-## Build the firmware
+1. Initialises the intercom routing state and enables relay handling.
+2. Restores any persisted pairings from flash-backed storage.
+3. Waits for the onboard button to trigger a pairing attempt.
+4. Uses the onboard LED to indicate pairing progress, pairing errors, or a healthy connected state.
 
-The repository includes a GitHub Actions workflow at `.github/workflows/build-firmware.yml` that mirrors the firmware build pipeline from `phieri/viking-bio-pwa`.
+When a pairing is initiated, the runtime:
 
-For a local host-side build and test run:
+- registers the target peer in the runtime's connected-peer list,
+- records the resulting connection state,
+- and persists the pairing metadata to flash.
+
+Audio packets are relayed to all connected peers except the source while the intercom is enabled and PTT is active.
+
+## Pairing workflow
+
+1. Power on the Pico intercom firmware.
+2. Press the onboard button to start a pairing attempt for the default test peer ID.
+3. Observe the status LED:
+   - blinking quickly: pairing or connection error
+   - blinking steadily: pairing in progress
+   - solid: at least one peer is connected
+4. The pairing metadata is persisted so it can be restored across reboots.
+
+## Build and test
+
+### Host build and tests
 
 ```sh
 cmake -S . -B build -DPICO_INTERCOM_FORCE_HOST_BUILD=ON -DPICO_INTERCOM_BUILD_HOST_TESTS=ON
@@ -40,11 +57,25 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-For a Pico firmware build, install the Raspberry Pi Pico SDK and configure with:
+### Pico firmware build
+
+Install the Raspberry Pi Pico SDK and then configure the firmware build:
 
 ```sh
-cmake -S . -B build -DPICO_BOARD=pico2_w -DPICO_SDK_PATH=/path/to/pico-sdk
-cmake --build build
+cmake -S . -B build-firmware -DPICO_BOARD=pico2_w -DPICO_SDK_PATH=/path/to/pico-sdk
+cmake --build build-firmware
 ```
 
-The build produces a `.uf2` image for flashing to a Raspberry Pi Pico 2 W board. The firmware target uses the Pico SDK's standard libraries and the intercom runtime's simple peer-pairing logic directly, with flash-backed persistence and a simple board interaction loop. The current implementation focuses on realistic firmware-state management and pairing recovery rather than a full wireless stack; the Bluetooth layer remains a practical embedded-runtime shim for the intercom logic.
+The build produces a `.uf2` image suitable for flashing to the Pico 2 W.
+
+## Flashing
+
+1. Put the Pico 2 W into BOOTSEL mode.
+2. Copy the generated `.uf2` image to the mounted Pico drive.
+3. Reboot the board and observe the serial console for startup and pairing messages.
+
+## Known limitations
+
+- The repository currently provides a realistic embedded runtime and flash-backed persistence layer, but it does not implement a full low-level BLE transport stack in this codebase.
+- Pairing is currently represented as a managed runtime connection flow for the target peer ID used by the onboard button workflow.
+- Production deployments that require full Bluetooth interoperability should wire this runtime into a hardware-appropriate transport layer (for example, a Pico SDK-compatible BLE stack) in a follow-up integration step.

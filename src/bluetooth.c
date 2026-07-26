@@ -28,6 +28,15 @@ static const bluetooth_command_alias_t bluetooth_command_aliases[] = {
     {"info", BLUETOOTH_COMMAND_STATUS},
 };
 
+enum {
+    BLUETOOTH_ERROR_NONE = 0u,
+    BLUETOOTH_ERROR_DISABLED = 1u,
+    BLUETOOTH_ERROR_PEER_LIMIT = 2u,
+    BLUETOOTH_ERROR_INVALID_INPUT = 3u,
+    BLUETOOTH_ERROR_STORAGE = 4u,
+    BLUETOOTH_ERROR_NOT_READY = 5u
+};
+
 /**
  * Parse a human-readable Bluetooth command into an internal command ID.
  *
@@ -65,6 +74,16 @@ static bool bluetooth_has_pending_target(const bluetooth_runtime_t *runtime, uin
     }
 
     return false;
+}
+
+static void bluetooth_record_error(bluetooth_runtime_t *runtime, uint8_t peer_id,
+                                   uint32_t error_code) {
+    if (runtime == NULL) {
+        return;
+    }
+
+    runtime->last_error_peer_id = peer_id;
+    runtime->last_error_code = error_code;
 }
 
 static void bluetooth_record_relay(bluetooth_runtime_t *runtime, uint8_t source_peer,
@@ -129,6 +148,16 @@ static void bluetooth_relay(void *context, uint8_t source_peer, uint8_t target_p
                            payload_len);
 }
 
+static void bluetooth_reset_peer_states(bluetooth_runtime_t *runtime) {
+    if (runtime == NULL) {
+        return;
+    }
+
+    for (size_t index = 0; index < INTERCOM_MAX_PEERS; ++index) {
+        runtime->peer_states[index] = BLUETOOTH_PEER_STATE_DISCONNECTED;
+    }
+}
+
 void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
     if (runtime == NULL) {
         return;
@@ -142,6 +171,7 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
     runtime->platform_initialized = true;
     runtime->platform_error = false;
     runtime->initialized = true;
+    bluetooth_reset_peer_states(runtime);
 }
 
 bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
@@ -150,6 +180,11 @@ bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
     }
 
     runtime->enabled = enabled;
+    if (!enabled) {
+        bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_DISABLED);
+    } else {
+        runtime->last_error_code = BLUETOOTH_ERROR_NONE;
+    }
     return true;
 }
 
@@ -167,6 +202,11 @@ bool bluetooth_toggle(bluetooth_runtime_t *runtime) {
     }
 
     runtime->enabled = !runtime->enabled;
+    if (!runtime->enabled) {
+        bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_DISABLED);
+    } else {
+        runtime->last_error_code = BLUETOOTH_ERROR_NONE;
+    }
     return runtime->enabled;
 }
 
@@ -184,6 +224,12 @@ bool bluetooth_disconnect(bluetooth_runtime_t *runtime, uint8_t peer_id) {
 
 bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
     if (!bluetooth_runtime_is_ready(runtime)) {
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_NOT_READY);
+        return false;
+    }
+
+    if (!runtime->enabled) {
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_DISABLED);
         return false;
     }
 
@@ -192,31 +238,50 @@ bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
     }
 
     if (runtime->connected_peer_count >= INTERCOM_MAX_PEERS) {
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_PEER_LIMIT);
         return false;
     }
 
     if (runtime->intercom != NULL && !intercom_add_peer(runtime->intercom, peer_id)) {
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_PEER_LIMIT);
         return false;
     }
 
-    runtime->connected_peers[runtime->connected_peer_count++] = peer_id;
+    const size_t peer_index = runtime->connected_peer_count;
+    runtime->connected_peers[peer_index] = peer_id;
+    runtime->connected_peer_count++;
+    runtime->connection_attempts++;
+    runtime->successful_connections++;
+    runtime->last_error_code = BLUETOOTH_ERROR_NONE;
+    runtime->peer_states[peer_index] = BLUETOOTH_PEER_STATE_CONNECTED;
     return true;
 }
 
 bool bluetooth_disconnect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
     if (!bluetooth_runtime_is_ready(runtime)) {
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_NOT_READY);
         return false;
     }
 
     size_t peer_index = bluetooth_find_peer_index(runtime, peer_id);
     if (peer_index >= runtime->connected_peer_count) {
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_INVALID_INPUT);
         return false;
     }
 
     for (size_t shift = peer_index + 1; shift < runtime->connected_peer_count; ++shift) {
         runtime->connected_peers[shift - 1] = runtime->connected_peers[shift];
+        runtime->peer_states[shift - 1] = runtime->peer_states[shift];
     }
     runtime->connected_peer_count--;
+    if (runtime->connected_peer_count < INTERCOM_MAX_PEERS) {
+        /* Keep the tail slot clear after removing the final connected peer. */
+        runtime->peer_states[runtime->connected_peer_count] = BLUETOOTH_PEER_STATE_DISCONNECTED;
+    }
+
+    runtime->disconnect_attempts++;
+    runtime->successful_disconnections++;
+    runtime->last_error_code = BLUETOOTH_ERROR_NONE;
 
     if (runtime->intercom != NULL) {
         intercom_remove_peer(runtime->intercom, peer_id);
@@ -229,6 +294,54 @@ bool bluetooth_is_peer_connected(const bluetooth_runtime_t *runtime, uint8_t pee
     return bluetooth_has_peer(runtime, peer_id);
 }
 
+const char *bluetooth_error_name(uint32_t error_code) {
+    switch (error_code) {
+    case BLUETOOTH_ERROR_DISABLED:
+        return "disabled";
+    case BLUETOOTH_ERROR_PEER_LIMIT:
+        return "peer_limit";
+    case BLUETOOTH_ERROR_INVALID_INPUT:
+        return "invalid_input";
+    case BLUETOOTH_ERROR_STORAGE:
+        return "storage";
+    case BLUETOOTH_ERROR_NOT_READY:
+        return "not_ready";
+    case BLUETOOTH_ERROR_NONE:
+    default:
+        return "none";
+    }
+}
+
+bool bluetooth_get_peer_state(const bluetooth_runtime_t *runtime, uint8_t peer_id,
+                              bluetooth_peer_state_t *state) {
+    if (runtime == NULL || state == NULL) {
+        return false;
+    }
+
+    const size_t peer_index = bluetooth_find_peer_index(runtime, peer_id);
+    if (peer_index >= runtime->connected_peer_count) {
+        *state = BLUETOOTH_PEER_STATE_DISCONNECTED;
+        return false;
+    }
+
+    *state = runtime->peer_states[peer_index];
+    return true;
+}
+
+const char *bluetooth_peer_state_name(bluetooth_peer_state_t state) {
+    switch (state) {
+    case BLUETOOTH_PEER_STATE_CONNECTING:
+        return "connecting";
+    case BLUETOOTH_PEER_STATE_CONNECTED:
+        return "connected";
+    case BLUETOOTH_PEER_STATE_DISCONNECTING:
+        return "disconnecting";
+    case BLUETOOTH_PEER_STATE_DISCONNECTED:
+    default:
+        return "disconnected";
+    }
+}
+
 /**
  * Execute a Bluetooth control command and record the resulting runtime state.
  *
@@ -236,7 +349,7 @@ bool bluetooth_is_peer_connected(const bluetooth_runtime_t *runtime, uint8_t pee
  * fields. Invalid commands or failed state transitions return false.
  */
 bool bluetooth_execute_command(bluetooth_runtime_t *runtime, bluetooth_command_id_t command,
-                              uint8_t peer_id) {
+                               uint8_t peer_id) {
     if (runtime == NULL) {
         return false;
     }
@@ -267,10 +380,16 @@ bool bluetooth_execute_command(bluetooth_runtime_t *runtime, bluetooth_command_i
         break;
     case BLUETOOTH_COMMAND_NONE:
     default:
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_INVALID_INPUT);
         return false;
     }
 
     if (!succeeded) {
+        if (command == BLUETOOTH_COMMAND_CONNECT || command == BLUETOOTH_COMMAND_PAIR) {
+            runtime->failed_connections++;
+        } else if (command == BLUETOOTH_COMMAND_DISCONNECT || command == BLUETOOTH_COMMAND_UNPAIR) {
+            runtime->failed_disconnections++;
+        }
         return false;
     }
 
@@ -291,6 +410,7 @@ bool bluetooth_handle_command(bluetooth_runtime_t *runtime, const char *command,
 
     bluetooth_command_id_t command_id = BLUETOOTH_COMMAND_NONE;
     if (!bluetooth_command_from_string(command, &command_id)) {
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_INVALID_INPUT);
         return false;
     }
 
@@ -298,16 +418,46 @@ bool bluetooth_handle_command(bluetooth_runtime_t *runtime, const char *command,
 }
 
 bool bluetooth_handle_pairing_button(bluetooth_runtime_t *runtime, uint8_t peer_id,
-                                    bool button_pressed) {
-    if (runtime == NULL || !button_pressed || !bluetooth_runtime_is_operational(runtime)) {
+                                     bool button_pressed) {
+    if (runtime == NULL) {
         return false;
     }
 
-    return bluetooth_execute_command(runtime, BLUETOOTH_COMMAND_PAIR, peer_id);
+    if (!button_pressed) {
+        runtime->pairing_in_progress = false;
+        return false;
+    }
+
+    runtime->pairing_attempts++;
+    runtime->pairing_in_progress = true;
+    runtime->pairing_error = false;
+    runtime->storage_error = false;
+    runtime->pairing_peer_id = peer_id;
+    runtime->last_error_code = BLUETOOTH_ERROR_NONE;
+    runtime->last_error_peer_id = 0U;
+
+    if (!bluetooth_runtime_is_operational(runtime)) {
+        runtime->pairing_in_progress = false;
+        runtime->pairing_error = true;
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_DISABLED);
+        return false;
+    }
+
+    const bool connected = bluetooth_execute_command(runtime, BLUETOOTH_COMMAND_PAIR, peer_id);
+    if (!connected) {
+        runtime->pairing_in_progress = false;
+        runtime->pairing_error = true;
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_PEER_LIMIT);
+        return false;
+    }
+
+    runtime->pairing_in_progress = false;
+    runtime->pairing_error = false;
+    return true;
 }
 
 void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
-                           const uint8_t *payload, size_t payload_len) {
+                            const uint8_t *payload, size_t payload_len) {
     if (!bluetooth_runtime_is_operational(runtime)) {
         return;
     }
