@@ -39,6 +39,9 @@ int main(void) {
     bluetooth_runtime_t runtime = {0};
     struct relay_context ctx = {0};
     static const uint8_t payload[] = {0x01, 0x02, 0x03};
+    enum {
+        TEST_PAIRING_PEER_ID = 4U
+    };
 
     intercom_init(&state);
     intercom_enable(&state, true);
@@ -68,12 +71,20 @@ int main(void) {
     assert(bluetooth_is_enabled(&runtime));
     bluetooth_runtime_t pairing_runtime = {0};
     bluetooth_init(&pairing_runtime, &state);
-    assert(!bluetooth_handle_pairing_button(&pairing_runtime, 4U, false));
-    assert(bluetooth_handle_pairing_button(&pairing_runtime, 4U, true));
-    assert(bluetooth_is_peer_connected(&pairing_runtime, 4U));
+    assert(!bluetooth_handle_pairing_button(NULL, TEST_PAIRING_PEER_ID, true));
+    bluetooth_runtime_t uninitialized_runtime = {0};
+    assert(!bluetooth_handle_pairing_button(&uninitialized_runtime, TEST_PAIRING_PEER_ID, true));
+    bluetooth_runtime_t disabled_runtime = {0};
+    bluetooth_init(&disabled_runtime, &state);
+    assert(bluetooth_disable(&disabled_runtime));
+    assert(!bluetooth_handle_pairing_button(&disabled_runtime, TEST_PAIRING_PEER_ID, true));
+    assert(!bluetooth_handle_pairing_button(&pairing_runtime, TEST_PAIRING_PEER_ID, false));
+    assert(bluetooth_handle_pairing_button(&pairing_runtime, TEST_PAIRING_PEER_ID, true));
+    assert(!bluetooth_handle_pairing_button(&pairing_runtime, TEST_PAIRING_PEER_ID, false));
+    assert(bluetooth_is_peer_connected(&pairing_runtime, TEST_PAIRING_PEER_ID));
     assert(pairing_runtime.command_count == 1U);
     assert(pairing_runtime.last_command == BLUETOOTH_COMMAND_PAIR);
-    assert(pairing_runtime.last_peer_id == 4U);
+    assert(pairing_runtime.last_peer_id == TEST_PAIRING_PEER_ID);
     assert(bluetooth_execute_command(&runtime, BLUETOOTH_COMMAND_CONNECT, 4U));
     assert(bluetooth_is_peer_connected(&runtime, 4U));
     assert(runtime.command_count == 1U);

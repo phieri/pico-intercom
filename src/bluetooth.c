@@ -297,7 +297,7 @@ bool bluetooth_handle_command(bluetooth_runtime_t *runtime, const char *command,
 
 bool bluetooth_handle_pairing_button(bluetooth_runtime_t *runtime, uint8_t peer_id,
                                     bool button_pressed) {
-    if (runtime == NULL || !button_pressed) {
+    if (runtime == NULL || !button_pressed || !bluetooth_runtime_is_operational(runtime)) {
         return false;
     }
 
