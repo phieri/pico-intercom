@@ -7,10 +7,11 @@ pico-intercom is a Raspberry Pi Pico 2 W firmware project for a local Bluetooth 
 The firmware now provides:
 
 - A modular intercom routing core that relays audio packets to connected peers while PTT is active.
-- A Bluetooth runtime with explicit peer states (`disconnected`/`connected`) and error tracking for failed connections and disconnects.
+- A Bluetooth Classic stack wrapper backed by a packet-oriented transport layer for connection management and relay traffic.
+- Explicit peer states (`disconnected`/`connected`) and error tracking for failed connections and disconnects.
 - Flash-backed pairing persistence for Pico targets, with write validation instead of best-effort storage.
 - A practical pairing flow driven by the onboard button and status LED.
-- Host-side tests that exercise the routing core, Bluetooth runtime, and pairing persistence without requiring hardware.
+- Host-side tests that exercise the routing core, Bluetooth runtime, pairing persistence, and the Classic transport path without requiring hardware.
 
 ## Hardware requirements
 
@@ -32,10 +33,11 @@ On boot, the firmware:
 When a pairing is initiated, the runtime:
 
 - registers the target peer in the runtime's connected-peer list,
+- brings the peer online through the Bluetooth Classic stack wrapper,
 - records the resulting connection state,
 - and persists the pairing metadata to flash.
 
-Audio packets are relayed to all connected peers except the source while the intercom is enabled and PTT is active.
+Audio packets are queued through the Classic transport and relayed to all connected peers except the source while the intercom is enabled and PTT is active.
 
 ## Pairing workflow
 
@@ -76,6 +78,6 @@ The build produces a `.uf2` image suitable for flashing to the Pico 2 W.
 
 ## Known limitations
 
-- The repository currently provides a realistic embedded runtime and flash-backed persistence layer, but it does not implement a full low-level BLE transport stack in this codebase.
+- The repository now includes a Bluetooth Classic-oriented transport and stack wrapper, but it does not vendor a full radio-driver stack for the Pico W's on-board chipset in this checkout.
 - Pairing is currently represented as a managed runtime connection flow for the target peer ID used by the onboard button workflow.
-- Production deployments that require full Bluetooth interoperability should wire this runtime into a hardware-appropriate transport layer (for example, a Pico SDK-compatible BLE stack) in a follow-up integration step.
+- Production deployments that require full radio interoperability should wire this runtime into a Pico SDK-compatible Classic Bluetooth stack backend in a follow-up integration step.

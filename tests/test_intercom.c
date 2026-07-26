@@ -119,6 +119,11 @@ int main(void) {
     assert(runtime.last_relay_target == 3U);
     assert(runtime.last_relay_payload_len == sizeof(payload));
     assert(memcmp(runtime.last_relay_payload, payload, sizeof(payload)) == 0);
+    assert(runtime.transport_packets_queued == 2U);
+    assert(runtime.transport_packets_delivered == 2U);
+    assert(runtime.last_transport_source_peer == 1U);
+    assert(runtime.last_transport_target_peer == 3U);
+    assert(bluetooth_classic_stack_pending_count(&runtime.classic_stack) == 0U);
 
     bluetooth_runtime_t runtime_to_disable = {0};
     bluetooth_init(&runtime_to_disable, &state);
@@ -184,6 +189,19 @@ int main(void) {
     assert(bluetooth_get_peer_state(&runtime, 2U, &queried_peer_state));
     assert(queried_peer_state == BLUETOOTH_PEER_STATE_CONNECTED);
     assert(!bluetooth_get_peer_state(&runtime, 99U, &queried_peer_state));
+
+    bluetooth_classic_stack_t classic_stack = {0};
+    bluetooth_classic_stack_init(&classic_stack);
+    assert(bluetooth_classic_stack_pair(&classic_stack, 5U));
+    assert(bluetooth_classic_stack_queue_packet(&classic_stack, 1U, 5U, payload,
+                                                sizeof(payload)));
+    assert(bluetooth_classic_stack_pending_count(&classic_stack) == 1U);
+    bluetooth_classic_packet_t classic_packet = {0};
+    assert(bluetooth_classic_stack_dequeue_packet(&classic_stack, &classic_packet));
+    assert(classic_packet.target_peer == 5U);
+    assert(classic_packet.payload_len == sizeof(payload));
+    assert(classic_packet.source_peer == 1U);
+    assert(bluetooth_classic_stack_pending_count(&classic_stack) == 0U);
 
     intercom_state_t limit_state;
     bluetooth_runtime_t limit_runtime = {0};

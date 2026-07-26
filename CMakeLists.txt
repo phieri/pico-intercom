@@ -20,6 +20,8 @@ set(CMAKE_CXX_STANDARD 17)
 add_library(intercom_core STATIC
     src/intercom.c
     src/bluetooth.c
+    src/bluetooth_transport.c
+    src/bluetooth_classic.c
     src/pairings.c
 )
 

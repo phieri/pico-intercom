@@ -142,10 +142,30 @@ static bool bluetooth_has_peer(const bluetooth_runtime_t *runtime, uint8_t peer_
     return bluetooth_find_peer_index(runtime, peer_id) < (runtime != NULL ? runtime->connected_peer_count : 0U);
 }
 
+static void bluetooth_flush_classic_packets(bluetooth_runtime_t *runtime) {
+    if (runtime == NULL) {
+        return;
+    }
+
+    bluetooth_classic_packet_t packet;
+    while (bluetooth_classic_stack_dequeue_packet(&runtime->classic_stack, &packet)) {
+        runtime->transport_packets_delivered++;
+        runtime->last_transport_source_peer = packet.source_peer;
+        runtime->last_transport_target_peer = packet.target_peer;
+    }
+}
+
 static void bluetooth_relay(void *context, uint8_t source_peer, uint8_t target_peer,
                             const uint8_t *payload, size_t payload_len) {
-    bluetooth_record_relay((bluetooth_runtime_t *)context, source_peer, target_peer, payload,
-                           payload_len);
+    bluetooth_runtime_t *runtime = (bluetooth_runtime_t *)context;
+    bluetooth_record_relay(runtime, source_peer, target_peer, payload, payload_len);
+
+    if (!bluetooth_classic_stack_queue_packet(&runtime->classic_stack, source_peer, target_peer,
+                                              payload, payload_len)) {
+        runtime->transport_packets_dropped++;
+    } else {
+        runtime->transport_packets_queued++;
+    }
 }
 
 static void bluetooth_reset_peer_states(bluetooth_runtime_t *runtime) {
@@ -171,6 +191,7 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
     runtime->platform_initialized = true;
     runtime->platform_error = false;
     runtime->initialized = true;
+    bluetooth_classic_stack_init(&runtime->classic_stack);
     bluetooth_reset_peer_states(runtime);
 }
 
@@ -180,6 +201,7 @@ bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
     }
 
     runtime->enabled = enabled;
+    bluetooth_classic_stack_set_enabled(&runtime->classic_stack, enabled);
     if (!enabled) {
         bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_DISABLED);
     } else {
@@ -202,6 +224,7 @@ bool bluetooth_toggle(bluetooth_runtime_t *runtime) {
     }
 
     runtime->enabled = !runtime->enabled;
+    bluetooth_classic_stack_set_enabled(&runtime->classic_stack, runtime->enabled);
     if (!runtime->enabled) {
         bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_DISABLED);
     } else {
@@ -247,6 +270,14 @@ bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
         return false;
     }
 
+    if (!bluetooth_classic_stack_connect(&runtime->classic_stack, peer_id)) {
+        if (runtime->intercom != NULL) {
+            intercom_remove_peer(runtime->intercom, peer_id);
+        }
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_NOT_READY);
+        return false;
+    }
+
     const size_t peer_index = runtime->connected_peer_count;
     runtime->connected_peers[peer_index] = peer_id;
     runtime->connected_peer_count++;
@@ -282,6 +313,8 @@ bool bluetooth_disconnect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
     runtime->disconnect_attempts++;
     runtime->successful_disconnections++;
     runtime->last_error_code = BLUETOOTH_ERROR_NONE;
+
+    (void)bluetooth_classic_stack_disconnect(&runtime->classic_stack, peer_id);
 
     if (runtime->intercom != NULL) {
         intercom_remove_peer(runtime->intercom, peer_id);
@@ -476,9 +509,17 @@ void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
     runtime->last_relay_payload_len = 0U;
 
     runtime->last_relay_count = 0U;
+    if (runtime->intercom != NULL) {
+        for (size_t index = 0; index < runtime->intercom->peer_count; ++index) {
+            const uint8_t intercom_peer = runtime->intercom->peers[index];
+            (void)bluetooth_classic_stack_connect(&runtime->classic_stack, intercom_peer);
+        }
+    }
+
     if (runtime->intercom != NULL && payload != NULL && payload_len > 0U) {
         runtime->last_relay_count = intercom_rebroadcast(
             runtime->intercom, source_peer, payload, payload_len, bluetooth_relay, runtime);
     }
     runtime->relay_target_count = runtime->pending_relay_target_count;
+    bluetooth_flush_classic_packets(runtime);
 }
