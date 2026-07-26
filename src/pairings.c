@@ -162,10 +162,16 @@ static bool pairing_store_flash_write_image(const pairing_flash_image_t *image) 
 
     pairing_flash_image_t verified = {0};
     if (!pairing_store_flash_read_image(&verified)) {
+        fprintf(stderr, "WARNING: flash pairing verification failed after write (readback unavailable)\n");
         return false;
     }
 
-    return memcmp(&verified, image, sizeof(*image)) == 0;
+    if (memcmp(&verified, image, sizeof(*image)) != 0) {
+        fprintf(stderr, "WARNING: flash pairing verification failed after write\n");
+        return false;
+    }
+
+    return true;
 }
 
 static bool pairing_store_flash_load(const pairing_store_t *store, pairing_t *pairings,

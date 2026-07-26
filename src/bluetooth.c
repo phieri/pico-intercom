@@ -196,8 +196,6 @@ static bool bluetooth_platform_set_enabled(bluetooth_runtime_t *runtime, bool en
 
         runtime->platform_initialized = true;
         runtime->platform_error = false;
-        runtime->advertising = true;
-        runtime->scanning = true;
         return true;
     }
 
