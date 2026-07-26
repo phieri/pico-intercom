@@ -33,6 +33,8 @@ typedef struct {
     bool enabled;
     bool advertising;
     bool scanning;
+    bool platform_initialized;
+    bool platform_error;
     size_t last_relay_count;
     size_t relay_invocations;
     size_t packets_received;
