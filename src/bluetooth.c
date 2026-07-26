@@ -77,6 +77,10 @@ static bool bluetooth_command_from_string(const char *command, bluetooth_command
     return false;
 }
 
+static bool bluetooth_runtime_is_ready(const bluetooth_runtime_t *runtime) {
+    return runtime != NULL && (runtime->initialized || runtime->platform_initialized);
+}
+
 static bool bluetooth_has_pending_target(const bluetooth_runtime_t *runtime, uint8_t target_peer) {
     for (size_t index = 0; index < runtime->pending_relay_target_count; ++index) {
         if (runtime->relay_targets[index] == target_peer) {
@@ -173,8 +177,7 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
 }
 
 bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
-    bool runtime_ready = runtime != NULL && (runtime->initialized || runtime->platform_initialized);
-    if (!runtime_ready) {
+    if (!bluetooth_runtime_is_ready(runtime)) {
         return false;
     }
 
@@ -191,7 +194,7 @@ bool bluetooth_disable(bluetooth_runtime_t *runtime) {
 }
 
 bool bluetooth_toggle(bluetooth_runtime_t *runtime) {
-    if (runtime == NULL) {
+    if (!bluetooth_runtime_is_ready(runtime)) {
         return false;
     }
 
@@ -212,7 +215,7 @@ bool bluetooth_disconnect(bluetooth_runtime_t *runtime, uint8_t peer_id) {
 }
 
 bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
-    if (runtime == NULL || !runtime->initialized) {
+    if (!bluetooth_runtime_is_ready(runtime)) {
         return false;
     }
 
@@ -233,7 +236,7 @@ bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
 }
 
 bool bluetooth_disconnect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
-    if (runtime == NULL || !runtime->initialized) {
+    if (!bluetooth_runtime_is_ready(runtime)) {
         return false;
     }
 
@@ -328,7 +331,7 @@ bool bluetooth_handle_command(bluetooth_runtime_t *runtime, const char *command,
 
 void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
                            const uint8_t *payload, size_t payload_len) {
-    if (runtime == NULL || !runtime->initialized || runtime->intercom == NULL) {
+    if (!bluetooth_runtime_is_ready(runtime)) {
         return;
     }
 
@@ -344,8 +347,12 @@ void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
     runtime->last_relay_source_peer = 0U;
     runtime->last_relay_target = 0U;
     runtime->last_relay_payload_len = 0U;
+    memset(runtime->last_relay_payload, 0, sizeof(runtime->last_relay_payload));
 
-    runtime->last_relay_count = intercom_rebroadcast(
-        runtime->intercom, source_peer, payload, payload_len, bluetooth_relay, runtime);
+    runtime->last_relay_count = 0U;
+    if (runtime->intercom != NULL && payload != NULL && payload_len > 0U) {
+        runtime->last_relay_count = intercom_rebroadcast(
+            runtime->intercom, source_peer, payload, payload_len, bluetooth_relay, runtime);
+    }
     runtime->relay_target_count = runtime->pending_relay_target_count;
 }
