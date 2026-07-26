@@ -1,0 +1,2 @@
+/usr/bin/ar qc libintercom_core.a CMakeFiles/intercom_core.dir/src/intercom.c.o CMakeFiles/intercom_core.dir/src/bluetooth.c.o CMakeFiles/intercom_core.dir/src/pairings.c.o
+/usr/bin/ranlib libintercom_core.a
