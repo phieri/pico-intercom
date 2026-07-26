@@ -13,6 +13,7 @@ The firmware now provides:
 - Flash-backed pairing persistence for Pico targets, with verified writes instead of best-effort storage.
 - A practical pairing flow driven by the onboard button and status LED.
 - Host-side tests that exercise the routing core, Bluetooth runtime, pairing persistence, and the Classic transport path without requiring hardware.
+- Persistent pairing entries that are de-duplicated by peer ID and updated in place when the same peer is saved again.
 
 ## Hardware requirements
 
