@@ -61,6 +61,19 @@ int main(void) {
 
     intercom_set_ptt(&state, true);
     bluetooth_init(&runtime, &state);
+    assert(bluetooth_is_enabled(&runtime));
+    assert(bluetooth_disable(&runtime));
+    assert(!bluetooth_is_enabled(&runtime));
+    assert(bluetooth_toggle(&runtime));
+    assert(bluetooth_is_enabled(&runtime));
+    assert(bluetooth_execute_command(&runtime, BLUETOOTH_COMMAND_CONNECT, 4U));
+    assert(bluetooth_is_peer_connected(&runtime, 4U));
+    assert(runtime.command_count == 1U);
+    assert(runtime.last_command == BLUETOOTH_COMMAND_CONNECT);
+    assert(runtime.last_peer_id == 4U);
+    assert(bluetooth_handle_command(&runtime, "disconnect", 4U));
+    assert(!bluetooth_is_peer_connected(&runtime, 4U));
+    assert(bluetooth_handle_command(&runtime, "status", 0U));
     bluetooth_handle_audio(&runtime, 1U, payload, sizeof(payload));
     assert(runtime.packets_received == 1U);
     assert(runtime.last_source_peer == 1U);
