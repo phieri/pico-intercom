@@ -1,36 +1,8 @@
 #include "bluetooth.h"
 
-#ifdef PICO_INTERCOM_TARGET
-#include "pico/btstack_cyw43.h"
-#include "pico/cyw43_arch.h"
-#endif
-
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
-
-#ifdef PICO_INTERCOM_TARGET
-static bool bluetooth_platform_init(bluetooth_runtime_t *runtime) {
-    if (runtime == NULL) {
-        return false;
-    }
-
-    if (cyw43_arch_init() != 0) {
-        fprintf(stderr, "WARNING: failed to initialize CYW43 architecture for Pico wireless support\n");
-        runtime->platform_error = true;
-        return false;
-    }
-
-    if (!btstack_cyw43_init(NULL)) {
-        fprintf(stderr, "WARNING: failed to initialize BTstack CYW43 integration\n");
-        runtime->platform_error = true;
-        return false;
-    }
-
-    runtime->platform_initialized = true;
-    return true;
-}
-#endif
 
 typedef struct {
     const char *alias;
@@ -78,7 +50,7 @@ static bool bluetooth_command_from_string(const char *command, bluetooth_command
 }
 
 static bool bluetooth_runtime_is_ready(const bluetooth_runtime_t *runtime) {
-    return runtime != NULL && (runtime->initialized || runtime->platform_initialized);
+    return runtime != NULL && runtime->initialized;
 }
 
 static bool bluetooth_has_pending_target(const bluetooth_runtime_t *runtime, uint8_t target_peer) {
@@ -160,16 +132,6 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
 
     memset(runtime, 0, sizeof(*runtime));
     runtime->intercom = intercom;
-
-#ifdef PICO_INTERCOM_TARGET
-    {
-        bool platform_ready = bluetooth_platform_init(runtime);
-        if (!platform_ready) {
-            return;
-        }
-    }
-#endif
-
     runtime->enabled = true;
     runtime->advertising = true;
     runtime->scanning = true;
@@ -331,7 +293,7 @@ bool bluetooth_handle_command(bluetooth_runtime_t *runtime, const char *command,
 
 void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
                            const uint8_t *payload, size_t payload_len) {
-    if (!bluetooth_runtime_is_ready(runtime)) {
+    if (!bluetooth_runtime_is_ready(runtime) || !runtime->enabled) {
         return;
     }
 

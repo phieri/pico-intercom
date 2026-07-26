@@ -27,7 +27,7 @@ target_include_directories(intercom_core PUBLIC include)
 
 if(NOT PICO_INTERCOM_FORCE_HOST_BUILD)
     target_compile_definitions(intercom_core PRIVATE PICO_INTERCOM_TARGET=1)
-    target_link_libraries(intercom_core PRIVATE pico_stdlib pico_btstack pico_btstack_cyw43)
+    target_link_libraries(intercom_core PRIVATE pico_stdlib)
 endif()
 
 if(PICO_INTERCOM_FORCE_HOST_BUILD)
@@ -46,7 +46,7 @@ else()
     endif()
 
     add_executable(pico_intercom src/main.c)
-    target_link_libraries(pico_intercom PRIVATE intercom_core pico_stdlib pico_btstack pico_btstack_cyw43)
+    target_link_libraries(pico_intercom PRIVATE intercom_core pico_stdlib)
     target_compile_definitions(pico_intercom PRIVATE PICO_INTERCOM_TARGET=1)
 
     pico_enable_stdio_usb(pico_intercom 1)
