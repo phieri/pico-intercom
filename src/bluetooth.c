@@ -176,7 +176,7 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
 }
 
 bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
-    if (runtime == NULL || !runtime->initialized) {
+    if (runtime == NULL || (!runtime->initialized && !runtime->platform_initialized)) {
         return false;
     }
 
