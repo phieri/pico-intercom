@@ -2,6 +2,52 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
+
+typedef struct {
+    const char *alias;
+    bluetooth_command_id_t command_id;
+} bluetooth_command_alias_t;
+
+#define BLUETOOTH_COMMAND_ALIAS_COUNT ((size_t)(sizeof(bluetooth_command_aliases) / sizeof(bluetooth_command_aliases[0])))
+
+static const bluetooth_command_alias_t bluetooth_command_aliases[] = {
+    {"enable", BLUETOOTH_COMMAND_ENABLE},
+    {"on", BLUETOOTH_COMMAND_ENABLE},
+    {"power_on", BLUETOOTH_COMMAND_ENABLE},
+    {"disable", BLUETOOTH_COMMAND_DISABLE},
+    {"off", BLUETOOTH_COMMAND_DISABLE},
+    {"power_off", BLUETOOTH_COMMAND_DISABLE},
+    {"toggle", BLUETOOTH_COMMAND_TOGGLE},
+    {"switch", BLUETOOTH_COMMAND_TOGGLE},
+    {"connect", BLUETOOTH_COMMAND_CONNECT},
+    {"pair", BLUETOOTH_COMMAND_CONNECT},
+    {"disconnect", BLUETOOTH_COMMAND_DISCONNECT},
+    {"unpair", BLUETOOTH_COMMAND_DISCONNECT},
+    {"status", BLUETOOTH_COMMAND_STATUS},
+    {"info", BLUETOOTH_COMMAND_STATUS},
+};
+
+/**
+ * Parse a human-readable Bluetooth command into an internal command ID.
+ *
+ * Supported aliases include enable/on/power_on, disable/off/power_off,
+ * toggle/switch, connect/pair, disconnect/unpair, and status/info.
+ */
+static bool bluetooth_command_from_string(const char *command, bluetooth_command_id_t *command_id) {
+    if (command == NULL || command_id == NULL) {
+        return false;
+    }
+
+    for (size_t index = 0; index < BLUETOOTH_COMMAND_ALIAS_COUNT; ++index) {
+        if (strcasecmp(command, bluetooth_command_aliases[index].alias) == 0) {
+            *command_id = bluetooth_command_aliases[index].command_id;
+            return true;
+        }
+    }
+
+    return false;
+}
 
 static bool bluetooth_has_pending_target(const bluetooth_runtime_t *runtime, uint8_t target_peer) {
     for (size_t index = 0; index < runtime->pending_relay_target_count; ++index) {
@@ -82,7 +128,48 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
 
     memset(runtime, 0, sizeof(*runtime));
     runtime->intercom = intercom;
+    runtime->enabled = true;
+    runtime->advertising = true;
+    runtime->scanning = true;
     runtime->initialized = true;
+}
+
+bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
+    if (runtime == NULL) {
+        return false;
+    }
+
+    runtime->enabled = enabled;
+    return true;
+}
+
+bool bluetooth_enable(bluetooth_runtime_t *runtime) {
+    return bluetooth_set_enabled(runtime, true);
+}
+
+bool bluetooth_disable(bluetooth_runtime_t *runtime) {
+    return bluetooth_set_enabled(runtime, false);
+}
+
+bool bluetooth_toggle(bluetooth_runtime_t *runtime) {
+    if (runtime == NULL) {
+        return false;
+    }
+
+    runtime->enabled = !runtime->enabled;
+    return runtime->enabled;
+}
+
+bool bluetooth_is_enabled(const bluetooth_runtime_t *runtime) {
+    return runtime != NULL && runtime->enabled;
+}
+
+bool bluetooth_connect(bluetooth_runtime_t *runtime, uint8_t peer_id) {
+    return bluetooth_connect_peer(runtime, peer_id);
+}
+
+bool bluetooth_disconnect(bluetooth_runtime_t *runtime, uint8_t peer_id) {
+    return bluetooth_disconnect_peer(runtime, peer_id);
 }
 
 bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
@@ -130,6 +217,74 @@ bool bluetooth_disconnect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
 
 bool bluetooth_is_peer_connected(const bluetooth_runtime_t *runtime, uint8_t peer_id) {
     return bluetooth_has_peer(runtime, peer_id);
+}
+
+/**
+ * Execute a Bluetooth control command and record the resulting runtime state.
+ *
+ * Successful commands update the runtime's command history and last-command
+ * fields. Invalid commands or failed state transitions return false.
+ */
+bool bluetooth_execute_command(bluetooth_runtime_t *runtime, bluetooth_command_id_t command,
+                              uint8_t peer_id) {
+    if (runtime == NULL) {
+        return false;
+    }
+
+    bool succeeded = false;
+    switch (command) {
+    case BLUETOOTH_COMMAND_ENABLE:
+        succeeded = bluetooth_enable(runtime);
+        break;
+    case BLUETOOTH_COMMAND_DISABLE:
+        succeeded = bluetooth_disable(runtime);
+        break;
+    case BLUETOOTH_COMMAND_TOGGLE:
+        succeeded = bluetooth_toggle(runtime);
+        break;
+    case BLUETOOTH_COMMAND_CONNECT:
+        /* Fall through to the PAIR alias handling. */
+    case BLUETOOTH_COMMAND_PAIR:
+        succeeded = bluetooth_connect(runtime, peer_id);
+        break;
+    case BLUETOOTH_COMMAND_DISCONNECT:
+        /* Fall through to the UNPAIR alias handling. */
+    case BLUETOOTH_COMMAND_UNPAIR:
+        succeeded = bluetooth_disconnect(runtime, peer_id);
+        break;
+    case BLUETOOTH_COMMAND_STATUS:
+        succeeded = true;
+        break;
+    case BLUETOOTH_COMMAND_NONE:
+    default:
+        return false;
+    }
+
+    if (!succeeded) {
+        return false;
+    }
+
+    runtime->command_count++;
+    runtime->last_command = command;
+    runtime->last_peer_id = peer_id;
+    return true;
+}
+
+/**
+ * Handle a string-based Bluetooth command by translating it to an internal
+ * command ID and executing the corresponding control action.
+ */
+bool bluetooth_handle_command(bluetooth_runtime_t *runtime, const char *command, uint8_t peer_id) {
+    if (runtime == NULL || command == NULL) {
+        return false;
+    }
+
+    bluetooth_command_id_t command_id = BLUETOOTH_COMMAND_NONE;
+    if (!bluetooth_command_from_string(command, &command_id)) {
+        return false;
+    }
+
+    return bluetooth_execute_command(runtime, command_id, peer_id);
 }
 
 void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
