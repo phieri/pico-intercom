@@ -1,21 +1,41 @@
 #include "pairings.h"
 
 #include <errno.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
-#if defined(PICO_INTERCOM_TARGET) && defined(__has_include)
-#if __has_include("littlefs/lfs.h")
-#define PICO_INTERCOM_HAS_LITTLEFS 1
-#endif
+#if defined(PICO_INTERCOM_TARGET)
+#include "hardware/flash.h"
+#include "hardware/sync.h"
+#include "pico/flash.h"
+#define PICO_INTERCOM_HAS_FLASH_STORAGE 1
+#else
+#define PICO_INTERCOM_HAS_FLASH_STORAGE 0
 #endif
 
-#ifndef PICO_INTERCOM_HAS_LITTLEFS
-#define PICO_INTERCOM_HAS_LITTLEFS 0
+#if PICO_INTERCOM_HAS_FLASH_STORAGE
+#ifndef XIP_BASE
+#define XIP_BASE 0x10000000u
 #endif
 
-#if PICO_INTERCOM_HAS_LITTLEFS
-#include "littlefs/lfs.h"
+#define PAIRING_FLASH_MAGIC 0x50495043u
+#define PAIRING_FLASH_VERSION 1u
+#define PAIRING_FLASH_IMAGE_SIZE 768U
+#define PAIRING_FLASH_IMAGE_HEADER_BYTES (sizeof(uint32_t) + sizeof(uint32_t) + \
+                                          sizeof(uint32_t) + sizeof(uint32_t) + \
+                                          sizeof(pairing_t) * PAIRING_MAX_COUNT)
+#define PAIRING_FLASH_REGION_SIZE FLASH_SECTOR_SIZE
+#define PAIRING_FLASH_REGION_OFFSET (PICO_FLASH_SIZE_BYTES - PAIRING_FLASH_REGION_SIZE)
+
+typedef struct {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t count;
+    uint32_t checksum;
+    pairing_t pairings[PAIRING_MAX_COUNT];
+    uint8_t padding[PAIRING_FLASH_IMAGE_SIZE - PAIRING_FLASH_IMAGE_HEADER_BYTES];
+} pairing_flash_image_t;
 #endif
 
 static bool pairing_store_is_duplicate(const pairing_t *pairings, size_t count,
@@ -86,24 +106,123 @@ static bool pairing_store_read_handle(FILE *handle, pairing_t *pairings, size_t 
 }
 #endif
 
-#if PICO_INTERCOM_HAS_LITTLEFS
-static bool pairing_store_littlefs_save(const pairing_store_t *store, const pairing_t *pairing) {
-    (void)store;
-    (void)pairing;
-    return false;
+#if PICO_INTERCOM_HAS_FLASH_STORAGE
+static uint32_t pairing_store_checksum(const pairing_flash_image_t *image) {
+    uint32_t checksum = 0x811C9DC5u;
+    const uint8_t *bytes = (const uint8_t *)image;
+    const size_t checksum_offset = offsetof(pairing_flash_image_t, checksum);
+
+    for (size_t index = 0; index < sizeof(*image); ++index) {
+        if (index >= checksum_offset && index < checksum_offset + sizeof(image->checksum)) {
+            continue;
+        }
+
+        checksum ^= bytes[index];
+        checksum *= 16777619u;
+    }
+
+    return checksum;
 }
 
-static bool pairing_store_littlefs_load(const pairing_store_t *store, pairing_t *pairings,
-                                        size_t *count) {
-    (void)store;
-    (void)pairings;
-    (void)count;
-    return false;
+static bool pairing_store_flash_image_is_valid(const pairing_flash_image_t *image) {
+    if (image == NULL) {
+        return false;
+    }
+
+    if (image->magic != PAIRING_FLASH_MAGIC || image->version != PAIRING_FLASH_VERSION) {
+        return false;
+    }
+
+    if (image->count > PAIRING_MAX_COUNT) {
+        return false;
+    }
+
+    return image->checksum == pairing_store_checksum(image);
 }
 
-static bool pairing_store_littlefs_clear(const pairing_store_t *store) {
+static bool pairing_store_flash_read_image(pairing_flash_image_t *image) {
+    if (image == NULL) {
+        return false;
+    }
+
+    const uint8_t *flash_address = (const uint8_t *)(XIP_BASE + PAIRING_FLASH_REGION_OFFSET);
+    memcpy(image, flash_address, sizeof(*image));
+    return pairing_store_flash_image_is_valid(image);
+}
+
+static bool pairing_store_flash_write_image(const pairing_flash_image_t *image) {
+    if (image == NULL) {
+        return false;
+    }
+
+    uint32_t interrupts = save_and_disable_interrupts();
+    flash_range_erase(PAIRING_FLASH_REGION_OFFSET, PAIRING_FLASH_REGION_SIZE);
+    flash_range_program(PAIRING_FLASH_REGION_OFFSET, (const uint8_t *)image, sizeof(*image));
+    restore_interrupts(interrupts);
+    return true;
+}
+
+static bool pairing_store_flash_load(const pairing_store_t *store, pairing_t *pairings,
+                                     size_t *count) {
     (void)store;
-    return false;
+    pairing_flash_image_t image = {0};
+    if (!pairing_store_flash_read_image(&image)) {
+        if (count != NULL) {
+            *count = 0U;
+        }
+        return true;
+    }
+
+    const size_t loaded_count = image.count;
+    if (count != NULL) {
+        *count = loaded_count;
+    }
+
+    if (pairings != NULL) {
+        memset(pairings, 0, sizeof(pairings[0]) * PAIRING_MAX_COUNT);
+        for (size_t index = 0; index < loaded_count; ++index) {
+            pairings[index] = image.pairings[index];
+        }
+    }
+
+    return true;
+}
+
+static bool pairing_store_flash_save(const pairing_store_t *store, const pairing_t *pairing) {
+    (void)store;
+    pairing_flash_image_t image = {0};
+    bool image_loaded = pairing_store_flash_read_image(&image);
+    size_t count = 0U;
+
+    if (image_loaded) {
+        count = image.count;
+    }
+
+    bool found = false;
+    for (size_t index = 0; index < count; ++index) {
+        if (image.pairings[index].peer_id == pairing->peer_id) {
+            image.pairings[index] = *pairing;
+            found = true;
+            break;
+        }
+    }
+
+    if (!found && count < PAIRING_MAX_COUNT) {
+        image.pairings[count++] = *pairing;
+    }
+
+    image.magic = PAIRING_FLASH_MAGIC;
+    image.version = PAIRING_FLASH_VERSION;
+    image.count = count;
+    image.checksum = 0U;
+    image.checksum = pairing_store_checksum(&image);
+    return pairing_store_flash_write_image(&image);
+}
+
+static bool pairing_store_flash_clear(const pairing_store_t *store) {
+    (void)store;
+    pairing_flash_image_t image = {0};
+    return pairing_store_flash_write_image(&image);
 }
 #endif
 
@@ -135,10 +254,8 @@ bool pairing_store_save(pairing_store_t *store, const pairing_t *pairing) {
         return false;
     }
 
-#if PICO_INTERCOM_HAS_LITTLEFS
-    if (pairing_store_littlefs_save(store, pairing)) {
-        return true;
-    }
+#if PICO_INTERCOM_HAS_FLASH_STORAGE
+    return pairing_store_flash_save(store, pairing);
 #endif
 
 #if defined(PICO_INTERCOM_TARGET)
@@ -158,13 +275,11 @@ bool pairing_store_save(pairing_store_t *store, const pairing_t *pairing) {
         return false;
     }
 
-#if !defined(PICO_INTERCOM_TARGET)
     if (pairing_store_read_handle(handle, existing, &count) &&
         pairing_store_is_duplicate(existing, count, pairing->peer_id)) {
         fclose(handle);
         return true;
     }
-#endif
 
     if (fseek(handle, 0, SEEK_END) != 0) {
         fclose(handle);
@@ -186,10 +301,8 @@ bool pairing_store_load(pairing_store_t *store, pairing_t *pairings, size_t *cou
         return false;
     }
 
-#if PICO_INTERCOM_HAS_LITTLEFS
-    if (pairing_store_littlefs_load(store, pairings, count)) {
-        return true;
-    }
+#if PICO_INTERCOM_HAS_FLASH_STORAGE
+    return pairing_store_flash_load(store, pairings, count);
 #endif
 
 #if defined(PICO_INTERCOM_TARGET)
@@ -205,12 +318,10 @@ bool pairing_store_load(pairing_store_t *store, pairing_t *pairings, size_t *cou
         return errno == ENOENT;
     }
 
-#if !defined(PICO_INTERCOM_TARGET)
     if (!pairing_store_read_handle(handle, pairings, count)) {
         fclose(handle);
         return false;
     }
-#endif
 
     fclose(handle);
     return true;
@@ -222,10 +333,8 @@ bool pairing_store_clear(pairing_store_t *store) {
         return false;
     }
 
-#if PICO_INTERCOM_HAS_LITTLEFS
-    if (pairing_store_littlefs_clear(store)) {
-        return true;
-    }
+#if PICO_INTERCOM_HAS_FLASH_STORAGE
+    return pairing_store_flash_clear(store);
 #endif
 
 #if defined(PICO_INTERCOM_TARGET)
