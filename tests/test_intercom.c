@@ -1,3 +1,4 @@
+#include "audio.h"
 #include "bluetooth.h"
 #include "intercom.h"
 #include "pairings.h"
@@ -13,6 +14,21 @@ struct relay_context {
     size_t calls;
     uint8_t targets[INTERCOM_MAX_PEERS];
 };
+
+typedef struct {
+    size_t calls;
+    size_t sample_count;
+    int16_t last_sample;
+} playback_context_t;
+
+static void playback_callback(void *context, const int16_t *samples, size_t sample_count) {
+    playback_context_t *ctx = (playback_context_t *)context;
+    ctx->calls++;
+    ctx->sample_count = sample_count;
+    if (sample_count > 0U) {
+        ctx->last_sample = samples[sample_count - 1U];
+    }
+}
 
 static int remove_test_file(const char *path) {
     if (remove(path) != 0 && errno != ENOENT) {
@@ -62,9 +78,61 @@ int main(void) {
     assert(relayed == 0U);
     assert(ctx.calls == 2U);
 
+    intercom_audio_subsystem_t audio = {0};
+    intercom_audio_init(&audio);
+    intercom_audio_frame_t captured_frame = {0};
+    assert(intercom_audio_capture_frame(&audio, &captured_frame));
+    assert(captured_frame.sample_count == INTERCOM_AUDIO_SAMPLES_PER_FRAME);
+    assert(captured_frame.sequence == 1U);
+    assert(captured_frame.samples[0] == -1800);
+    assert(captured_frame.samples[1] == -1664);
+    uint8_t encoded_audio[BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN] = {0};
+    size_t encoded_len = 0U;
+    assert(intercom_audio_encode_frame(&captured_frame, encoded_audio, sizeof(encoded_audio),
+                                       &encoded_len));
+    assert(encoded_len == intercom_audio_frame_bytes(&captured_frame));
+    intercom_audio_frame_t decoded_frame = {0};
+    assert(intercom_audio_decode_frame(encoded_audio, encoded_len, &decoded_frame));
+    assert(decoded_frame.sample_count == captured_frame.sample_count);
+    assert(decoded_frame.sequence == captured_frame.sequence);
+    assert(decoded_frame.samples[0] == captured_frame.samples[0]);
+    playback_context_t playback_ctx = {0};
+    intercom_audio_set_playback_callback(&audio, playback_callback, &playback_ctx);
+    assert(intercom_audio_playback_frame(&audio, &decoded_frame));
+    assert(intercom_audio_drain_playback_queue(&audio));
+    assert(playback_ctx.calls == 1U);
+    assert(playback_ctx.sample_count == decoded_frame.sample_count);
+    assert(playback_ctx.last_sample == decoded_frame.samples[decoded_frame.sample_count - 1U]);
+
+    intercom_audio_subsystem_t overflow_audio = {0};
+    intercom_audio_init(&overflow_audio);
+    intercom_audio_frame_t overflow_frame = {0};
+    assert(intercom_audio_capture_frame(&overflow_audio, &overflow_frame));
+    for (size_t index = 0; index < INTERCOM_AUDIO_PLAYBACK_QUEUE_DEPTH; ++index) {
+        assert(intercom_audio_playback_frame(&overflow_audio, &overflow_frame));
+    }
+    assert(!intercom_audio_playback_frame(&overflow_audio, &overflow_frame));
+    assert(overflow_audio.overruns == 1U);
+    assert(overflow_audio.queued_frame_count == INTERCOM_AUDIO_PLAYBACK_QUEUE_DEPTH);
+
     intercom_set_ptt(&state, true);
     bluetooth_init(&runtime, &state);
     assert(bluetooth_is_enabled(&runtime));
+    intercom_state_t local_audio_state;
+    intercom_init(&local_audio_state);
+    intercom_enable(&local_audio_state, true);
+    assert(intercom_add_peer(&local_audio_state, 2U));
+    assert(intercom_add_peer(&local_audio_state, 3U));
+    intercom_set_ptt(&local_audio_state, true);
+
+    bluetooth_runtime_t local_audio_runtime = {0};
+    bluetooth_init(&local_audio_runtime, &local_audio_state);
+    intercom_audio_set_playback_callback(&local_audio_runtime.audio, playback_callback, &playback_ctx);
+    assert(bluetooth_process_local_audio(&local_audio_runtime, 7U));
+    assert(local_audio_runtime.audio.encoded_frames == 1U);
+    assert(local_audio_runtime.audio.decoded_frames == 1U);
+    assert(local_audio_runtime.audio.played_frames == 1U);
+    assert(local_audio_runtime.last_relay_count == 2U);
     assert(bluetooth_disable(&runtime));
     assert(!bluetooth_is_enabled(&runtime));
     assert(bluetooth_toggle(&runtime));

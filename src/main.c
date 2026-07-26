@@ -35,6 +35,14 @@
 #define PICO_INTERCOM_PAIRING_DISPLAY_MS 400U
 #endif
 
+#ifndef PICO_INTERCOM_AUDIO_POLL_MS
+#define PICO_INTERCOM_AUDIO_POLL_MS 100U
+#endif
+
+#ifndef PICO_INTERCOM_LOCAL_PEER_ID
+#define PICO_INTERCOM_LOCAL_PEER_ID 1U
+#endif
+
 /**
  * Generate a human-readable pairing label for the provided peer ID.
  *
@@ -111,6 +119,7 @@ int main(void) {
     bool pairing_in_progress = false;
     bool pairing_error = false;
     uint32_t pairing_started_ms = 0U;
+    uint32_t last_audio_tick_ms = 0U;
 
     intercom_init(&intercom);
     intercom_enable(&intercom, true);
@@ -167,6 +176,12 @@ int main(void) {
         const uint32_t elapsed_pairing_ms = now_ms - pairing_started_ms;
         if (pairing_in_progress && elapsed_pairing_ms >= PICO_INTERCOM_PAIRING_DISPLAY_MS) {
             pairing_in_progress = false;
+        }
+
+        if (bluetooth_runtime_is_operational(&bluetooth) && intercom.enabled && intercom.ptt_pressed &&
+            (now_ms - last_audio_tick_ms) >= PICO_INTERCOM_AUDIO_POLL_MS) {
+            (void)bluetooth_process_local_audio(&bluetooth, PICO_INTERCOM_LOCAL_PEER_ID);
+            last_audio_tick_ms = now_ms;
         }
 
         update_status_led(&bluetooth, pairing_in_progress, pairing_error, now_ms);

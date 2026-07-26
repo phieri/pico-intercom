@@ -225,6 +225,7 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
 #endif
     runtime->platform_error = false;
     runtime->initialized = true;
+    intercom_audio_init(&runtime->audio);
     bluetooth_classic_stack_init(&runtime->classic_stack);
     bluetooth_reset_peer_states(runtime);
     (void)bluetooth_platform_set_enabled(runtime, runtime->enabled);
@@ -243,6 +244,7 @@ bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
     }
 
     runtime->enabled = enabled;
+    intercom_audio_set_enabled(&runtime->audio, enabled);
     bluetooth_classic_stack_set_enabled(&runtime->classic_stack, enabled);
     if (!enabled) {
         bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_DISABLED);
@@ -266,6 +268,7 @@ bool bluetooth_toggle(bluetooth_runtime_t *runtime) {
     }
 
     runtime->enabled = !runtime->enabled;
+    intercom_audio_set_enabled(&runtime->audio, runtime->enabled);
     bluetooth_classic_stack_set_enabled(&runtime->classic_stack, runtime->enabled);
     if (!runtime->enabled) {
         bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_DISABLED);
@@ -532,6 +535,27 @@ bool bluetooth_handle_pairing_button(bluetooth_runtime_t *runtime, uint8_t peer_
     return true;
 }
 
+bool bluetooth_process_local_audio(bluetooth_runtime_t *runtime, uint8_t source_peer) {
+    if (!bluetooth_runtime_is_operational(runtime)) {
+        return false;
+    }
+
+    intercom_audio_frame_t frame;
+    if (!intercom_audio_capture_frame(&runtime->audio, &frame)) {
+        return false;
+    }
+
+    uint8_t payload[BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN] = {0};
+    size_t payload_len = 0U;
+    if (!intercom_audio_encode_frame(&frame, payload, sizeof(payload), &payload_len)) {
+        return false;
+    }
+
+    intercom_audio_note_encoded_frame(&runtime->audio);
+    bluetooth_handle_audio(runtime, source_peer, payload, payload_len);
+    return true;
+}
+
 void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
                             const uint8_t *payload, size_t payload_len) {
     if (!bluetooth_runtime_is_operational(runtime)) {
@@ -562,6 +586,16 @@ void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
                 bluetooth_record_error(runtime, intercom_peer, BLUETOOTH_ERROR_NOT_READY);
             }
         }
+    }
+
+    intercom_audio_frame_t decoded_frame;
+    if (payload != NULL && payload_len > 0U &&
+        intercom_audio_decode_frame(payload, payload_len, &decoded_frame)) {
+        intercom_audio_note_decoded_frame(&runtime->audio);
+        if (!intercom_audio_playback_frame(&runtime->audio, &decoded_frame)) {
+            intercom_audio_note_playback_dropped(&runtime->audio);
+        }
+        (void)intercom_audio_drain_playback_queue(&runtime->audio);
     }
 
     if (runtime->intercom != NULL && payload != NULL && payload_len > 0U) {

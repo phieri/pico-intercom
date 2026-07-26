@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "audio.h"
 #include "bluetooth_classic.h"
 #include "intercom.h"
 
@@ -79,6 +80,7 @@ typedef struct {
     size_t transport_packets_dropped;
     uint8_t last_transport_source_peer;
     uint8_t last_transport_target_peer;
+    intercom_audio_subsystem_t audio;
     bluetooth_classic_stack_t classic_stack;
 } bluetooth_runtime_t;
 
@@ -104,6 +106,7 @@ bool bluetooth_handle_command(bluetooth_runtime_t *runtime, const char *command,
                               uint8_t peer_id);
 bool bluetooth_handle_pairing_button(bluetooth_runtime_t *runtime, uint8_t peer_id,
                                     bool button_pressed);
+bool bluetooth_process_local_audio(bluetooth_runtime_t *runtime, uint8_t source_peer);
 void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
                            const uint8_t *payload, size_t payload_len);
 
