@@ -25,6 +25,7 @@ typedef struct {
     uint8_t last_relay_target;
     uint8_t relay_targets[INTERCOM_MAX_PEERS];
     size_t relay_target_count;
+    size_t pending_relay_target_count;
     uint8_t last_relay_payload[BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN];
     size_t last_relay_payload_len;
     uint8_t connected_peers[INTERCOM_MAX_PEERS];
