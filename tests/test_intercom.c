@@ -148,12 +148,6 @@ int main(void) {
     assert(crlf_count == 1U);
     assert(crlf_pairings[0].peer_id == 8U);
     assert(strcmp(crlf_pairings[0].name, "headset-8") == 0);
-    if (remove_test_file("pairings_test.txt") != 0) {
-        return 1;
-    }
-    if (remove_test_file("missing_pairings_test.txt") != 0) {
-        return 1;
-    }
     if (remove_test_file("crlf_pairings_test.txt") != 0) {
         return 1;
     }
