@@ -35,8 +35,9 @@ static void pairing_store_trim_newline(char *value) {
     }
 
     size_t length = strlen(value);
-    if (length > 0U && value[length - 1U] == '\n') {
+    while (length > 0U && (value[length - 1U] == '\n' || value[length - 1U] == '\r')) {
         value[length - 1U] = '\0';
+        length--;
     }
 }
 
@@ -112,10 +113,15 @@ bool pairing_store_init(pairing_store_t *store, const char *path) {
     }
 
     memset(store, 0, sizeof(*store));
-    if (path == NULL || path[0] == '\0') {
-        snprintf(store->path, sizeof(store->path), "pairings.txt");
-    } else {
-        snprintf(store->path, sizeof(store->path), "%s", path);
+
+    const char *store_path = path;
+    if (store_path == NULL || store_path[0] == '\0') {
+        store_path = "pairings.txt";
+    }
+
+    int written = snprintf(store->path, sizeof(store->path), "%s", store_path);
+    if (written < 0 || (size_t)written >= sizeof(store->path)) {
+        return false;
     }
 
     store->initialized = true;

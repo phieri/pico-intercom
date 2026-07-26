@@ -80,6 +80,8 @@ int main(void) {
     assert(runtime.connected_peer_count == 3U);
     assert(bluetooth_disconnect_peer(&runtime, 4U));
     assert(!bluetooth_is_peer_connected(&runtime, 4U));
+    assert(!bluetooth_disconnect_peer(&runtime, 99U));
+    assert(runtime.connected_peer_count == 2U);
 
     intercom_state_t limit_state;
     bluetooth_runtime_t limit_runtime = {0};
@@ -120,6 +122,20 @@ int main(void) {
     assert(pairing_store_init(&missing_store, "missing_pairings_test.txt"));
     assert(pairing_store_load(&missing_store, empty_pairings, &empty_count));
     assert(empty_count == 0U);
+
+    pairing_store_t crlf_store = {0};
+    pairing_t crlf_pairings[8] = {{0}};
+    size_t crlf_count = 0U;
+    FILE *crlf_handle = fopen("crlf_pairings_test.txt", "w");
+    assert(crlf_handle != NULL);
+    assert(fprintf(crlf_handle, "8,headset-8\r\n") >= 0);
+    fclose(crlf_handle);
+
+    assert(pairing_store_init(&crlf_store, "crlf_pairings_test.txt"));
+    assert(pairing_store_load(&crlf_store, crlf_pairings, &crlf_count));
+    assert(crlf_count == 1U);
+    assert(crlf_pairings[0].peer_id == 8U);
+    assert(strcmp(crlf_pairings[0].name, "headset-8") == 0);
 
     return 0;
 }

@@ -112,19 +112,20 @@ bool bluetooth_disconnect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
     }
 
     size_t peer_index = bluetooth_find_peer_index(runtime, peer_id);
-    bool removed = peer_index < runtime->connected_peer_count;
-    if (removed) {
-        for (size_t shift = peer_index + 1; shift < runtime->connected_peer_count; ++shift) {
-            runtime->connected_peers[shift - 1] = runtime->connected_peers[shift];
-        }
-        runtime->connected_peer_count--;
+    if (peer_index >= runtime->connected_peer_count) {
+        return false;
     }
+
+    for (size_t shift = peer_index + 1; shift < runtime->connected_peer_count; ++shift) {
+        runtime->connected_peers[shift - 1] = runtime->connected_peers[shift];
+    }
+    runtime->connected_peer_count--;
 
     if (runtime->intercom != NULL) {
         intercom_remove_peer(runtime->intercom, peer_id);
     }
 
-    return removed;
+    return true;
 }
 
 bool bluetooth_is_peer_connected(const bluetooth_runtime_t *runtime, uint8_t peer_id) {
