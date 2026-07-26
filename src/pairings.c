@@ -156,10 +156,21 @@ static bool pairing_store_flash_write_image(const pairing_flash_image_t *image) 
     }
 
     uint32_t interrupts = save_and_disable_interrupts();
-    flash_range_erase(PAIRING_FLASH_REGION_OFFSET, PAIRING_FLASH_REGION_SIZE);
-    flash_range_program(PAIRING_FLASH_REGION_OFFSET, (const uint8_t *)image, sizeof(*image));
+    const int erase_status = flash_range_erase(PAIRING_FLASH_REGION_OFFSET, PAIRING_FLASH_REGION_SIZE);
+    const int program_status = flash_range_program(PAIRING_FLASH_REGION_OFFSET,
+                                                   (const uint8_t *)image, sizeof(*image));
     restore_interrupts(interrupts);
-    return true;
+
+    if (erase_status != 0 || program_status != 0) {
+        return false;
+    }
+
+    pairing_flash_image_t verified = {0};
+    if (!pairing_store_flash_read_image(&verified)) {
+        return false;
+    }
+
+    return memcmp(&verified, image, sizeof(*image)) == 0;
 }
 
 static bool pairing_store_flash_load(const pairing_store_t *store, pairing_t *pairings,
@@ -190,6 +201,10 @@ static bool pairing_store_flash_load(const pairing_store_t *store, pairing_t *pa
 
 static bool pairing_store_flash_save(const pairing_store_t *store, const pairing_t *pairing) {
     (void)store;
+    if (pairing == NULL) {
+        return false;
+    }
+
     pairing_flash_image_t image = {0};
     bool image_loaded = pairing_store_flash_read_image(&image);
     size_t count = 0U;

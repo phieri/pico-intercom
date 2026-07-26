@@ -75,7 +75,8 @@ static void update_status_led(const bluetooth_runtime_t *bluetooth, bool pairing
         return;
     }
 
-    if (pairing_error) {
+    const bool runtime_error = pairing_error || bluetooth->storage_error;
+    if (runtime_error) {
         gpio_put(PICO_INTERCOM_STATUS_LED_PIN, (now_ms / 250U) & 1U);
         return;
     }
@@ -120,9 +121,11 @@ int main(void) {
     pairing_store_init(&pairing_store, "pairings.txt");
     if (pairing_store_load(&pairing_store, persisted_pairings, &persisted_count)) {
         for (size_t index = 0; index < persisted_count; ++index) {
-            if (bluetooth_connect_peer(&bluetooth, persisted_pairings[index].peer_id)) {
-                printf("Restored pairing for peer %u.\n",
-                       (unsigned)persisted_pairings[index].peer_id);
+            const uint8_t peer_id = persisted_pairings[index].peer_id;
+            if (bluetooth_connect_peer(&bluetooth, peer_id)) {
+                printf("Restored pairing for peer %u.\n", (unsigned)peer_id);
+            } else {
+                printf("Failed to restore pairing for peer %u.\n", (unsigned)peer_id);
             }
         }
     }
@@ -146,11 +149,12 @@ int main(void) {
                                                  true)) {
                 pairing_t button_pairing = make_pairing(PICO_INTERCOM_PAIR_BUTTON_PEER_ID);
                 if (pairing_store_save(&pairing_store, &button_pairing)) {
-                    printf("Pairing initiated for peer %u.\n",
+                    printf("Pairing complete for peer %u.\n",
                            (unsigned)PICO_INTERCOM_PAIR_BUTTON_PEER_ID);
                 } else {
+                    bluetooth.storage_error = true;
                     pairing_error = true;
-                    printf("Failed to persist pairing for peer %u.\n",
+                    printf("Pairing connected but failed to persist peer %u.\n",
                            (unsigned)PICO_INTERCOM_PAIR_BUTTON_PEER_ID);
                 }
             } else {
