@@ -40,6 +40,18 @@ When a pairing is initiated, the runtime:
 
 Audio packets are queued through the Classic transport and relayed to all connected peers except the source while the intercom is enabled and PTT is active.
 
+## Audio pipeline
+
+The firmware now includes a lightweight PCM audio path for the Pico intercom runtime:
+
+- microphone-style capture is represented by an audio subsystem that produces PCM16 frames at 8 kHz with one channel and 32-sample payloads,
+- each frame is packetized into a small binary payload that includes a sequence number and timestamp,
+- frames are relayed through the existing intercom transport when PTT is active and the intercom is enabled,
+- received frames are decoded and queued for playback through a small playback callback interface,
+- playback buffering is intentionally bounded so overruns are handled gracefully without blocking the runtime.
+
+On the current host/build path this audio subsystem is exercised through deterministic frame generation and playback callbacks; on the Pico target it can be connected to hardware microphone/speaker interfaces in a follow-on integration step.
+
 ## Pairing workflow
 
 1. Power on the Pico intercom firmware.
