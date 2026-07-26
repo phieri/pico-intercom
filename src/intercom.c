@@ -2,6 +2,20 @@
 
 #include <string.h>
 
+static size_t intercom_find_peer_index(const intercom_state_t *state, uint8_t peer_id) {
+    if (state == NULL) {
+        return 0U;
+    }
+
+    for (size_t index = 0; index < state->peer_count; ++index) {
+        if (state->peers[index] == peer_id) {
+            return index;
+        }
+    }
+
+    return state->peer_count;
+}
+
 void intercom_init(intercom_state_t *state) {
     if (state == NULL) {
         return;
@@ -25,10 +39,8 @@ bool intercom_add_peer(intercom_state_t *state, uint8_t peer_id) {
         return false;
     }
 
-    for (size_t index = 0; index < state->peer_count; ++index) {
-        if (state->peers[index] == peer_id) {
-            return true;
-        }
+    if (intercom_find_peer_index(state, peer_id) < state->peer_count) {
+        return true;
     }
 
     state->peers[state->peer_count++] = peer_id;
@@ -40,17 +52,16 @@ bool intercom_remove_peer(intercom_state_t *state, uint8_t peer_id) {
         return false;
     }
 
-    for (size_t index = 0; index < state->peer_count; ++index) {
-        if (state->peers[index] == peer_id) {
-            for (size_t shift = index + 1; shift < state->peer_count; ++shift) {
-                state->peers[shift - 1] = state->peers[shift];
-            }
-            state->peer_count--;
-            return true;
-        }
+    size_t peer_index = intercom_find_peer_index(state, peer_id);
+    if (peer_index >= state->peer_count) {
+        return false;
     }
 
-    return false;
+    for (size_t shift = peer_index + 1; shift < state->peer_count; ++shift) {
+        state->peers[shift - 1] = state->peers[shift];
+    }
+    state->peer_count--;
+    return true;
 }
 
 void intercom_set_ptt(intercom_state_t *state, bool pressed) {
