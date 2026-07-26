@@ -119,8 +119,10 @@ bool pairing_store_init(pairing_store_t *store, const char *path) {
         store_path = "pairings.txt";
     }
 
-    int written = snprintf(store->path, sizeof(store->path), "%s", store_path);
-    if (written < 0 || (size_t)written >= sizeof(store->path)) {
+    int required_length = snprintf(store->path, sizeof(store->path), "%s", store_path);
+    if (required_length < 0 || (size_t)required_length >= sizeof(store->path)) {
+        store->path[0] = '\0';
+        store->initialized = false;
         return false;
     }
 
