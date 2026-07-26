@@ -40,11 +40,7 @@ bool bluetooth_transport_set_enabled(bluetooth_transport_t *transport, bool enab
     }
 
     transport->enabled = enabled;
-    if (!enabled) {
-        transport->error = true;
-    } else {
-        transport->error = false;
-    }
+    transport->error = false;
     return true;
 }
 

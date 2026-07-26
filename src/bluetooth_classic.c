@@ -62,7 +62,6 @@ bool bluetooth_classic_stack_disconnect(bluetooth_classic_stack_t *stack, uint8_
     }
 
     if (!bluetooth_transport_disconnect(&stack->transport, peer_id)) {
-        stack->connected = false;
         return false;
     }
 
@@ -91,7 +90,7 @@ bool bluetooth_classic_stack_dequeue_packet(bluetooth_classic_stack_t *stack,
 }
 
 size_t bluetooth_classic_stack_pending_count(const bluetooth_classic_stack_t *stack) {
-    if (!bluetooth_classic_stack_is_ready(stack)) {
+    if (stack == NULL) {
         return 0U;
     }
 

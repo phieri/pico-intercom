@@ -265,16 +265,17 @@ bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
         return false;
     }
 
-    if (runtime->intercom != NULL && !intercom_add_peer(runtime->intercom, peer_id)) {
-        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_PEER_LIMIT);
+    if (!bluetooth_classic_stack_connect(&runtime->classic_stack, peer_id)) {
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_NOT_READY);
         return false;
     }
 
-    if (!bluetooth_classic_stack_connect(&runtime->classic_stack, peer_id)) {
-        if (runtime->intercom != NULL) {
-            intercom_remove_peer(runtime->intercom, peer_id);
+    if (runtime->intercom != NULL && !intercom_add_peer(runtime->intercom, peer_id)) {
+        if (!bluetooth_classic_stack_disconnect(&runtime->classic_stack, peer_id)) {
+            runtime->failed_disconnections++;
+            bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_NOT_READY);
         }
-        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_NOT_READY);
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_PEER_LIMIT);
         return false;
     }
 
@@ -510,9 +511,14 @@ void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
 
     runtime->last_relay_count = 0U;
     if (runtime->intercom != NULL) {
+        /* Reconnect any peers that are already known to the intercom core so the
+         * relay path can recover from earlier setup gaps without dropping the audio burst. */
         for (size_t index = 0; index < runtime->intercom->peer_count; ++index) {
             const uint8_t intercom_peer = runtime->intercom->peers[index];
-            (void)bluetooth_classic_stack_connect(&runtime->classic_stack, intercom_peer);
+            if (!bluetooth_classic_stack_connect(&runtime->classic_stack, intercom_peer)) {
+                runtime->failed_connections++;
+                bluetooth_record_error(runtime, intercom_peer, BLUETOOTH_ERROR_NOT_READY);
+            }
         }
     }
 
