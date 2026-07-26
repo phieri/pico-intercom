@@ -156,23 +156,22 @@ static bool pairing_store_flash_write_image(const pairing_flash_image_t *image) 
     }
 
     uint32_t interrupts = save_and_disable_interrupts();
-    const int erase_status = flash_range_erase(PAIRING_FLASH_REGION_OFFSET, PAIRING_FLASH_REGION_SIZE);
-    const int program_status = flash_range_program(PAIRING_FLASH_REGION_OFFSET,
-                                                   (const uint8_t *)image, sizeof(*image));
+    flash_range_erase(PAIRING_FLASH_REGION_OFFSET, PAIRING_FLASH_REGION_SIZE);
+    flash_range_program(PAIRING_FLASH_REGION_OFFSET, (const uint8_t *)image, sizeof(*image));
     restore_interrupts(interrupts);
-
-    if (erase_status != 0 || program_status != 0) {
-        fprintf(stderr, "WARNING: flash pairing write failed (erase=%d program=%d)\n",
-                erase_status, program_status);
-        return false;
-    }
 
     pairing_flash_image_t verified = {0};
     if (!pairing_store_flash_read_image(&verified)) {
+        fprintf(stderr, "WARNING: flash pairing verification failed after write (readback unavailable)\n");
         return false;
     }
 
-    return memcmp(&verified, image, sizeof(*image)) == 0;
+    if (memcmp(&verified, image, sizeof(*image)) != 0) {
+        fprintf(stderr, "WARNING: flash pairing verification failed after write\n");
+        return false;
+    }
+
+    return true;
 }
 
 static bool pairing_store_flash_load(const pairing_store_t *store, pairing_t *pairings,

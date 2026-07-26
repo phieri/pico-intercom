@@ -1,5 +1,9 @@
 #include "bluetooth.h"
 
+#if defined(PICO_INTERCOM_TARGET)
+#include "pico/stdlib.h"
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -63,7 +67,8 @@ static bool bluetooth_runtime_is_ready(const bluetooth_runtime_t *runtime) {
 }
 
 bool bluetooth_runtime_is_operational(const bluetooth_runtime_t *runtime) {
-    return runtime != NULL && runtime->initialized && runtime->enabled && !runtime->platform_error;
+    return runtime != NULL && runtime->initialized && runtime->enabled && runtime->platform_initialized &&
+           !runtime->platform_error;
 }
 
 static bool bluetooth_has_pending_target(const bluetooth_runtime_t *runtime, uint8_t target_peer) {
@@ -178,6 +183,31 @@ static void bluetooth_reset_peer_states(bluetooth_runtime_t *runtime) {
     }
 }
 
+static bool bluetooth_platform_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
+#if defined(PICO_INTERCOM_TARGET)
+    if (runtime == NULL) {
+        return false;
+    }
+
+    if (enabled) {
+        if (runtime->platform_initialized) {
+            return true;
+        }
+
+        runtime->platform_initialized = true;
+        runtime->platform_error = false;
+        return true;
+    }
+
+    runtime->platform_initialized = false;
+    runtime->platform_error = false;
+    return true;
+#else
+    (void)runtime;
+    return true;
+#endif
+}
+
 void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
     if (runtime == NULL) {
         return;
@@ -188,15 +218,27 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
     runtime->enabled = true;
     runtime->advertising = true;
     runtime->scanning = true;
+#if defined(PICO_INTERCOM_TARGET)
+    runtime->platform_initialized = false;
+#else
     runtime->platform_initialized = true;
+#endif
     runtime->platform_error = false;
     runtime->initialized = true;
     bluetooth_classic_stack_init(&runtime->classic_stack);
     bluetooth_reset_peer_states(runtime);
+    (void)bluetooth_platform_set_enabled(runtime, runtime->enabled);
 }
 
 bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
     if (!bluetooth_runtime_is_ready(runtime)) {
+        return false;
+    }
+
+    if (!bluetooth_platform_set_enabled(runtime, enabled)) {
+        runtime->enabled = false;
+        bluetooth_classic_stack_set_enabled(&runtime->classic_stack, false);
+        bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_DISABLED);
         return false;
     }
 
