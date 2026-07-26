@@ -295,6 +295,15 @@ bool bluetooth_handle_command(bluetooth_runtime_t *runtime, const char *command,
     return bluetooth_execute_command(runtime, command_id, peer_id);
 }
 
+bool bluetooth_handle_pairing_button(bluetooth_runtime_t *runtime, uint8_t peer_id,
+                                    bool button_pressed) {
+    if (runtime == NULL || !button_pressed || !bluetooth_runtime_is_operational(runtime)) {
+        return false;
+    }
+
+    return bluetooth_execute_command(runtime, BLUETOOTH_COMMAND_PAIR, peer_id);
+}
+
 void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
                            const uint8_t *payload, size_t payload_len) {
     if (!bluetooth_runtime_is_operational(runtime)) {
