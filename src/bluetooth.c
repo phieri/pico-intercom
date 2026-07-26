@@ -347,7 +347,6 @@ void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
     runtime->last_relay_source_peer = 0U;
     runtime->last_relay_target = 0U;
     runtime->last_relay_payload_len = 0U;
-    memset(runtime->last_relay_payload, 0, sizeof(runtime->last_relay_payload));
 
     runtime->last_relay_count = 0U;
     if (runtime->intercom != NULL && payload != NULL && payload_len > 0U) {

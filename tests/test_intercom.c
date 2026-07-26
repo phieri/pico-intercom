@@ -100,13 +100,14 @@ int main(void) {
     assert(!bluetooth_connect_peer(&invalid_runtime, 5U));
     assert(!bluetooth_disconnect_peer(&invalid_runtime, 5U));
 
-    const size_t packets_before = runtime.packets_received;
-    bluetooth_handle_audio(&runtime, 2U, NULL, 0U);
-    assert(runtime.packets_received == packets_before + 1U);
-    assert(runtime.last_source_peer == 2U);
-    assert(runtime.last_payload_len == 0U);
-    assert(runtime.last_relay_count == 0U);
-    assert(runtime.relay_target_count == 0U);
+    bluetooth_runtime_t audio_runtime = runtime;
+    const size_t packets_before = audio_runtime.packets_received;
+    bluetooth_handle_audio(&audio_runtime, 2U, NULL, 0U);
+    assert(audio_runtime.packets_received == packets_before + 1U);
+    assert(audio_runtime.last_source_peer == 2U);
+    assert(audio_runtime.last_payload_len == 0U);
+    assert(audio_runtime.last_relay_count == 0U);
+    assert(audio_runtime.relay_target_count == 0U);
 
     intercom_set_ptt(&state, false);
     bluetooth_handle_audio(&runtime, 2U, payload, sizeof(payload));
