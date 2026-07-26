@@ -66,6 +66,14 @@ int main(void) {
     assert(!bluetooth_is_enabled(&runtime));
     assert(bluetooth_toggle(&runtime));
     assert(bluetooth_is_enabled(&runtime));
+    bluetooth_runtime_t pairing_runtime = {0};
+    bluetooth_init(&pairing_runtime, &state);
+    assert(!bluetooth_handle_pairing_button(&pairing_runtime, 4U, false));
+    assert(bluetooth_handle_pairing_button(&pairing_runtime, 4U, true));
+    assert(bluetooth_is_peer_connected(&pairing_runtime, 4U));
+    assert(pairing_runtime.command_count == 1U);
+    assert(pairing_runtime.last_command == BLUETOOTH_COMMAND_PAIR);
+    assert(pairing_runtime.last_peer_id == 4U);
     assert(bluetooth_execute_command(&runtime, BLUETOOTH_COMMAND_CONNECT, 4U));
     assert(bluetooth_is_peer_connected(&runtime, 4U));
     assert(runtime.command_count == 1U);
