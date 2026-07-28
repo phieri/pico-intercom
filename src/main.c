@@ -118,8 +118,9 @@ int main(void) {
     uint32_t pairing_started_ms = 0U;
     uint32_t last_audio_tick_ms = 0U;
     size_t last_reported_ready_peers = 0U;
-    uint32_t last_reported_error = UINT32_MAX;
+    uint32_t last_reported_error = 0U;
     uint32_t last_status_report_ms = 0U;
+    bool have_reported_status = false;
 
     intercom_init(&intercom);
     intercom_enable(&intercom, true);
@@ -198,7 +199,7 @@ int main(void) {
             last_audio_tick_ms = now_ms;
         }
 
-        if (bluetooth.session_ready_peer_count != last_reported_ready_peers ||
+        if (!have_reported_status || bluetooth.session_ready_peer_count != last_reported_ready_peers ||
             bluetooth.last_error_code != last_reported_error) {
             if ((now_ms - last_status_report_ms) >= 1000U ||
                 bluetooth.session_ready_peer_count == 0U ||
@@ -210,6 +211,7 @@ int main(void) {
                 last_status_report_ms = now_ms;
                 last_reported_ready_peers = bluetooth.session_ready_peer_count;
                 last_reported_error = bluetooth.last_error_code;
+                have_reported_status = true;
             }
         }
 

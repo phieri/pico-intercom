@@ -19,11 +19,16 @@ typedef struct {
     ((size_t)(sizeof(bluetooth_command_aliases) / sizeof(bluetooth_command_aliases[0])))
 
 static const bluetooth_command_alias_t bluetooth_command_aliases[] = {
-    {"enable", BLUETOOTH_COMMAND_ENABLE},   {"on", BLUETOOTH_COMMAND_ENABLE},
-    {"power_on", BLUETOOTH_COMMAND_ENABLE}, {"disable", BLUETOOTH_COMMAND_DISABLE},
-    {"off", BLUETOOTH_COMMAND_DISABLE},     {"power_off", BLUETOOTH_COMMAND_DISABLE},
-    {"toggle", BLUETOOTH_COMMAND_TOGGLE},   {"switch", BLUETOOTH_COMMAND_TOGGLE},
-    {"connect", BLUETOOTH_COMMAND_CONNECT}, {"pair", BLUETOOTH_COMMAND_CONNECT},
+    {"enable", BLUETOOTH_COMMAND_ENABLE},
+    {"on", BLUETOOTH_COMMAND_ENABLE},
+    {"power_on", BLUETOOTH_COMMAND_ENABLE},
+    {"disable", BLUETOOTH_COMMAND_DISABLE},
+    {"off", BLUETOOTH_COMMAND_DISABLE},
+    {"power_off", BLUETOOTH_COMMAND_DISABLE},
+    {"toggle", BLUETOOTH_COMMAND_TOGGLE},
+    {"switch", BLUETOOTH_COMMAND_TOGGLE},
+    {"connect", BLUETOOTH_COMMAND_CONNECT},
+    {"pair", BLUETOOTH_COMMAND_CONNECT},
     {"disconnect", BLUETOOTH_COMMAND_DISCONNECT},
     {"unpair", BLUETOOTH_COMMAND_DISCONNECT},
     {"status", BLUETOOTH_COMMAND_STATUS},
@@ -197,10 +202,16 @@ static void bluetooth_mark_pairing_completed(bluetooth_runtime_t *runtime, uint8
 }
 
 static uint32_t bluetooth_generate_session_id(bluetooth_runtime_t *runtime, uint8_t peer_id) {
-    const uint32_t now_ms = bluetooth_now_ms(runtime);
-    uint32_t session_id = ((uint32_t)runtime->local_peer_id << 24U) |
-                          ((uint32_t)peer_id << 16U) |
-                          ((now_ms ^ (uint32_t)runtime->protocol_messages_sent) & 0xFFFFU);
+    if (runtime == NULL) {
+        return 0U;
+    }
+
+    if (runtime->next_session_id == 0U) {
+        runtime->next_session_id = ((uint32_t)runtime->local_peer_id << 24U) | 1U;
+    }
+
+    uint32_t session_id = runtime->next_session_id++;
+    session_id ^= ((uint32_t)peer_id << 16U);
     if (session_id == 0U) {
         session_id = 1U;
     }
@@ -230,6 +241,9 @@ static void bluetooth_record_relay(bluetooth_runtime_t *runtime, uint8_t source_
     }
 
     if (runtime->pending_relay_target_count >= INTERCOM_MAX_PEERS) {
+        fprintf(stderr,
+                "WARNING: bluetooth relay target tracking limit (%u) reached, cannot record peer %u\n",
+                (unsigned)INTERCOM_MAX_PEERS, (unsigned)target_peer);
         return;
     }
 
@@ -242,7 +256,7 @@ static void bluetooth_record_relay(bluetooth_runtime_t *runtime, uint8_t source_
         runtime->last_relay_payload_len = BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN;
     }
 
-    if (payload != NULL && runtime->last_relay_payload_len > 0U) {
+    if (runtime->last_relay_payload_len > 0U && payload != NULL) {
         memcpy(runtime->last_relay_payload, payload, runtime->last_relay_payload_len);
     } else {
         memset(runtime->last_relay_payload, 0, sizeof(runtime->last_relay_payload));
@@ -344,7 +358,8 @@ static uint8_t bluetooth_derive_local_peer_id(void) {
         crc ^= board_id.id[index];
         for (uint8_t bit = 0U; bit < 8U; ++bit) {
             /* CRC-8 with polynomial 0x07 gives a better spread than a raw XOR fold
-             * before we compress the result into the firmware's 1-250 peer-ID range. */
+             * before we compress the result into the firmware's 1-250 peer-ID range.
+             * The final modulo and +1 keep the ID non-zero even if the CRC is zero. */
             crc = (crc & 0x80U) != 0U ? (uint8_t)((crc << 1U) ^ 0x07U) : (uint8_t)(crc << 1U);
         }
     }
@@ -528,12 +543,6 @@ static void bluetooth_service_protocol_links(bluetooth_runtime_t *runtime) {
             continue;
         }
 
-        if (now_ms - link->last_activity_ms >= BLUETOOTH_KEEPALIVE_MS) {
-            (void)bluetooth_queue_protocol_message(runtime, link->peer_id,
-                                                   INTERCOM_PROTOCOL_MESSAGE_KEEPALIVE, NULL, 0U,
-                                                   0U);
-        }
-
         if (now_ms - link->last_activity_ms >= BLUETOOTH_SESSION_TIMEOUT_MS) {
             printf("Bluetooth session with peer %u timed out; disconnecting stale link.\n",
                    (unsigned)link->peer_id);
@@ -542,6 +551,10 @@ static void bluetooth_service_protocol_links(bluetooth_runtime_t *runtime) {
             bluetooth_refresh_session_ready_count(runtime);
             bluetooth_record_error(runtime, link->peer_id, BLUETOOTH_ERROR_NOT_READY);
             (void)bluetooth_classic_stack_disconnect(&runtime->classic_stack, link->peer_id);
+        } else if (now_ms - link->last_activity_ms >= BLUETOOTH_KEEPALIVE_MS) {
+            (void)bluetooth_queue_protocol_message(runtime, link->peer_id,
+                                                   INTERCOM_PROTOCOL_MESSAGE_KEEPALIVE, NULL, 0U,
+                                                   0U);
         }
     }
 }
@@ -636,6 +649,7 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
     runtime->platform_initialized = true;
 #endif
     runtime->initialized = true;
+    runtime->next_session_id = ((uint32_t)runtime->local_peer_id << 24U) | 1U;
     intercom_audio_init(&runtime->audio);
     bluetooth_classic_stack_init(&runtime->classic_stack);
     bluetooth_classic_stack_set_local_peer_id(&runtime->classic_stack, runtime->local_peer_id);
@@ -1076,9 +1090,15 @@ bool bluetooth_handle_transport_payload(bluetooth_runtime_t *runtime, uint8_t so
 
     switch (message.message_type) {
     case INTERCOM_PROTOCOL_MESSAGE_HELLO:
-        link->session_id = message.session_id != 0U ? message.session_id
-                                                    : bluetooth_generate_session_id(runtime,
-                                                                                    source_peer);
+        if (message.session_id == 0U) {
+            runtime->protocol_messages_dropped++;
+            bluetooth_record_error(runtime, source_peer, BLUETOOTH_ERROR_PROTOCOL);
+            (void)bluetooth_send_protocol_error(runtime, source_peer,
+                                                INTERCOM_PROTOCOL_ERROR_SESSION,
+                                                "missing session id");
+            return false;
+        }
+        link->session_id = message.session_id;
         link->hello_received = true;
         link->link_state = BLUETOOTH_LINK_STATE_HANDSHAKING;
         bluetooth_mark_session_ready(runtime, link, source_peer, link->session_id);
@@ -1113,7 +1133,8 @@ bool bluetooth_handle_transport_payload(bluetooth_runtime_t *runtime, uint8_t so
         }
         if (link->last_audio_sequence != 0U) {
             const uint16_t expected_next_sequence = (uint16_t)(link->last_audio_sequence + 1U);
-            const uint16_t audio_gap = (uint16_t)(message.sequence - expected_next_sequence);
+            const uint16_t audio_gap =
+                (uint16_t)((message.sequence - expected_next_sequence) & 0xFFFFU);
             if (audio_gap > 0U && audio_gap < 0x8000U) {
                 link->missing_audio_frames += (uint32_t)audio_gap;
             }

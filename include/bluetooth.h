@@ -115,6 +115,7 @@ typedef struct {
     size_t protocol_messages_dropped;
     size_t session_ready_peer_count;
     uint32_t last_status_ms;
+    uint32_t next_session_id;
     bluetooth_peer_link_t peer_links[INTERCOM_MAX_PEERS];
     intercom_audio_subsystem_t audio;
     bluetooth_classic_stack_t classic_stack;

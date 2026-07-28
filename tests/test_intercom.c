@@ -97,6 +97,8 @@ int main(void) {
         TEST_PAIRING_PEER_ID = 4U,
         TEST_PROTOCOL_RUNTIME_PEER_ID = 6U,
         TEST_TIMEOUT_RUNTIME_PEER_ID = 7U,
+        /* 60 host-side polls at 100 ms each exceed the 5 s session timeout. */
+        TIMEOUT_TEST_POLL_ITERATIONS = 60U,
     };
 
     intercom_init(&state);
@@ -379,7 +381,9 @@ int main(void) {
                                    (uint16_t)inbound_audio_len, &wrong_target_len));
     assert(!bluetooth_handle_transport_payload(&protocol_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID,
                                                protocol_packet, wrong_target_len));
-    assert(strcmp(bluetooth_error_name(protocol_runtime.last_error_code), "protocol") == 0);
+    const char *protocol_error_name = bluetooth_error_name(protocol_runtime.last_error_code);
+    assert(protocol_error_name != NULL);
+    assert(strcmp(protocol_error_name, "protocol") == 0);
 
     bluetooth_runtime_t timeout_runtime = {0};
     intercom_state_t timeout_state;
@@ -389,7 +393,7 @@ int main(void) {
     assert(bluetooth_restore_pairing(&timeout_runtime, TEST_TIMEOUT_RUNTIME_PEER_ID));
     assert(bluetooth_connect_peer(&timeout_runtime, TEST_TIMEOUT_RUNTIME_PEER_ID));
     assert(bluetooth_runtime_is_operational(&timeout_runtime));
-    for (size_t index = 0; index < 60U; ++index) {
+    for (size_t index = 0; index < TIMEOUT_TEST_POLL_ITERATIONS; ++index) {
         bluetooth_poll(&timeout_runtime);
     }
     assert(!bluetooth_runtime_is_operational(&timeout_runtime));
