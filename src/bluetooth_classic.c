@@ -593,7 +593,7 @@ static void hci_event_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
             peer->address_type = (uint8_t)gap_event_advertising_report_get_address_type(packet);
             peer->last_seen_ms = now_ms();
             if (peer->name[0] == '\0') {
-                make_short_name(peer->name, sizeof(peer->name), peer_id);
+                make_short_name(peer->name, sizeof(peer->name), advertised_peer_id);
             }
 
             if ((stack->transport.pending_pair_peer_id == advertised_peer_id ||
