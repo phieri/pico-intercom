@@ -1,67 +1,42 @@
 # pico-intercom
 
-pico-intercom is a Raspberry Pi Pico 2 W firmware project for a local Bluetooth audio intercom. The codebase has been refactored from a demo-style simulation into a more production-oriented embedded runtime with explicit connection state handling, persistent pairing storage, and a hardware-driven pairing workflow.
+pico-intercom is a Raspberry Pi Pico 2 W firmware project for a local Bluetooth audio intercom. The repository now contains a real target-side runtime for the Pico 2 W that initializes the CYW43 wireless core and a hardware-backed audio backend rather than relying on synthetic placeholders.
 
 ## What changed
 
 The firmware now provides:
 
 - A modular intercom routing core that relays audio packets to connected peers while PTT is active.
-- A Bluetooth runtime layer that initializes the Pico W runtime through the Raspberry Pi Pico SDK and tracks pairing/connection state for the embedded target.
-- A Bluetooth Classic stack wrapper backed by a packet-oriented transport layer for connection management and relay traffic.
-- Explicit peer states (`disconnected`/`connected`) and error tracking for failed connections and disconnects.
-- Flash-backed pairing persistence for Pico targets, with verified writes instead of best-effort storage.
-- A practical pairing flow driven by the onboard button and status LED.
-- Host-side tests that exercise the routing core, Bluetooth runtime, pairing persistence, and the Classic transport path without requiring hardware.
-- Persistent pairing entries that are de-duplicated by peer ID and updated in place when the same peer is saved again.
+- A target-side Bluetooth runtime that initializes the Pico W radio stack through the Raspberry Pi Pico SDK and brings up the CYW43 wireless backend for runtime status and future transport work.
+- A hardware-backed audio path that uses the Pico SDK ADC/PWM peripherals for capture/playback on the Pico target.
+- Flash-backed pairing persistence for Pico targets with verified writes instead of best-effort storage.
+- Host-side tests that exercise the routing core, Bluetooth runtime, pairing persistence, and transport logic without requiring hardware.
 
 ## Hardware requirements
 
 - Raspberry Pi Pico 2 W board
 - USB cable for flashing and serial console
-- Optional: a Bluetooth headset or test device that can be paired to the Pico runtime conceptually
+- Onboard button (GPIO 14 by default) to trigger pairing
+- Onboard LED (GPIO 25 by default) to indicate runtime state
+- Optional analog audio hardware:
+  - ADC input on GPIO 26 (ADC0) for a microphone or analog signal source
+  - PWM output on GPIO 16 for a small speaker or earphone driver
 
-The firmware uses the Pico SDK's GPIO and flash support and is designed to run from the Pico 2 W's onboard flash.
+The audio backend uses a simple, practical path that works with an analog microphone or other ADC source and a PWM-driven output stage. The build does not require a codec or I2S peripheral.
 
 ## Firmware behavior
 
 On boot, the firmware:
 
-1. Initialises the intercom routing state and enables relay handling.
-2. Restores any persisted pairings from flash-backed storage.
-3. Waits for the onboard button to trigger a pairing attempt.
-4. Uses the onboard LED to indicate pairing progress, pairing errors, or a healthy connected state.
+1. Initializes the intercom routing state and enables relay handling.
+2. Initializes the Pico W radio backend through the CYW43 driver and brings the wireless backend online.
+3. Restores any persisted pairings from flash-backed storage.
+4. Waits for the onboard button to trigger a pairing attempt.
+5. Uses the onboard LED to indicate pairing progress, pairing errors, or a healthy connected state.
 
-When a pairing is initiated, the runtime:
+When a pairing is initiated, the runtime records the target peer in the runtime state, marks the radio backend as active, and persists the pairing metadata to flash.
 
-- registers the target peer in the runtime's connected-peer list,
-- brings the peer online through the Bluetooth Classic stack wrapper,
-- records the resulting connection state,
-- and persists the pairing metadata to flash.
-
-Audio packets are queued through the Classic transport and relayed to all connected peers except the source while the intercom is enabled and PTT is active.
-
-## Audio pipeline
-
-The firmware now includes a lightweight PCM audio path for the Pico intercom runtime:
-
-- microphone-style capture is represented by an audio subsystem that produces PCM16 frames at 8 kHz with one channel and 32-sample payloads,
-- each frame is packetized into a small binary payload that includes a sequence number and timestamp,
-- frames are relayed through the existing intercom transport when PTT is active and the intercom is enabled,
-- received frames are decoded and queued for playback through a small playback callback interface,
-- playback buffering is intentionally bounded so overruns are handled gracefully without blocking the runtime.
-
-On the current host/build path this audio subsystem is exercised through deterministic frame generation and playback callbacks; on the Pico target it can be connected to hardware microphone/speaker interfaces in a follow-on integration step.
-
-## Pairing workflow
-
-1. Power on the Pico intercom firmware.
-2. Press the onboard button to start a pairing attempt for the default test peer ID.
-3. Observe the status LED:
-   - blinking quickly: pairing or connection error
-   - blinking steadily: pairing in progress
-   - solid: at least one peer is connected
-4. The pairing metadata is persisted so it can be restored across reboots.
+Audio packets are queued through the existing transport layer and relayed to peers while the intercom is enabled and PTT is active. On the Pico target the audio subsystem uses hardware capture/playback callbacks rather than a purely synthetic frame generator.
 
 ## Build and test
 
@@ -75,10 +50,10 @@ ctest --test-dir build --output-on-failure
 
 ### Pico firmware build
 
-Install the Raspberry Pi Pico SDK and then configure the firmware build:
+The repository includes a local Pico SDK checkout, so the firmware build can be configured directly:
 
 ```sh
-cmake -S . -B build-firmware -DPICO_BOARD=pico2_w -DPICO_SDK_PATH=/path/to/pico-sdk
+cmake -S . -B build-firmware -DPICO_BOARD=pico2_w -DPICO_SDK_PATH=$PWD/pico-sdk
 cmake --build build-firmware
 ```
 
@@ -88,10 +63,10 @@ The build produces a `.uf2` image suitable for flashing to the Pico 2 W.
 
 1. Put the Pico 2 W into BOOTSEL mode.
 2. Copy the generated `.uf2` image to the mounted Pico drive.
-3. Reboot the board and observe the serial console for startup and pairing messages.
+3. Reboot the board and observe the USB serial console for startup and pairing messages.
 
 ## Known limitations
 
-- The firmware now uses the Pico SDK’s embedded runtime path for the Pico W target and the transport layer for pairing/relay coordination, but it does not vendor a full Bluetooth Classic profile stack in this checkout.
-- Pairing is currently represented as a managed runtime connection flow for the target peer ID used by the onboard button workflow.
-- Production deployments that require full radio interoperability should wire this runtime into a Pico SDK-compatible Classic Bluetooth stack backend in a follow-up integration step.
+- The current firmware uses a practical Pico SDK CYW43 runtime initialization path and a hardware ADC/PWM audio backend. It is intended as a buildable, flashable runtime and demonstration firmware rather than a full-featured Bluetooth Classic or advanced codec implementation.
+- Actual peer-to-peer interoperability depends on a second Pico or a compatible device with a matching transport layer; the current build is focused on bringing up the radio and audio hardware cleanly.
+- The audio path uses a simple ADC/PWM bridge and is intended for development and demonstration purposes; for production quality audio you would typically use a dedicated microphone codec and DAC/I2S path.
