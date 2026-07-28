@@ -200,11 +200,14 @@ static uint8_t bluetooth_derive_local_peer_id(void) {
 #if defined(PICO_INTERCOM_TARGET)
     pico_unique_board_id_t board_id;
     pico_get_unique_board_id(&board_id);
-    uint8_t folded = 0U;
+    uint8_t crc = 0U;
     for (size_t index = 0; index < sizeof(board_id.id); ++index) {
-        folded ^= board_id.id[index];
+        crc ^= board_id.id[index];
+        for (uint8_t bit = 0U; bit < 8U; ++bit) {
+            crc = (crc & 0x80U) != 0U ? (uint8_t)((crc << 1U) ^ 0x07U) : (uint8_t)(crc << 1U);
+        }
     }
-    return (uint8_t)((folded % 250U) + 1U);
+    return (uint8_t)((crc % 250U) + 1U);
 #else
     return 1U;
 #endif

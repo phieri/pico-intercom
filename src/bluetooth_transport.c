@@ -2,6 +2,14 @@
 
 #include <string.h>
 
+enum {
+    BLUETOOTH_TRANSPORT_ERROR_NONE = 0U,
+    BLUETOOTH_TRANSPORT_ERROR_PEER_LIMIT = 2U,
+    BLUETOOTH_TRANSPORT_ERROR_NOT_CONNECTED = 3U,
+    BLUETOOTH_TRANSPORT_ERROR_QUEUE_FULL = 4U,
+    BLUETOOTH_TRANSPORT_ERROR_PEER_UNDISCOVERED = 13U
+};
+
 static size_t bluetooth_transport_find_peer_index(const bluetooth_transport_t *transport,
                                                   uint8_t peer_id) {
     if (transport == NULL) {
@@ -35,7 +43,7 @@ static bool bluetooth_transport_remember_peer(bluetooth_transport_t *transport, 
 
     if (transport->remembered_peer_count >= INTERCOM_MAX_PEERS) {
         transport->error = true;
-        transport->last_error_code = 2U;
+        transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_PEER_LIMIT;
         return false;
     }
 
@@ -118,12 +126,12 @@ bool bluetooth_transport_connect(bluetooth_transport_t *transport, uint8_t peer_
 #if defined(PICO_INTERCOM_TARGET)
     if (!bluetooth_transport_peer_is_discovered(transport, peer_id)) {
         transport->error = true;
-        transport->last_error_code = 13U;
+        transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_PEER_UNDISCOVERED;
         return false;
     }
 
     transport->pending_pair_peer_id = peer_id;
-    transport->last_error_code = 0U;
+    transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_NONE;
     return transport->backend_ready;
 #else
     if (bluetooth_transport_has_peer(transport, peer_id)) {
@@ -132,14 +140,14 @@ bool bluetooth_transport_connect(bluetooth_transport_t *transport, uint8_t peer_
 
     if (transport->connected_peer_count >= INTERCOM_MAX_PEERS) {
         transport->error = true;
-        transport->last_error_code = 2U;
+        transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_PEER_LIMIT;
         return false;
     }
 
     const size_t peer_index = transport->connected_peer_count++;
     transport->connected_peers[peer_index] = peer_id;
     transport->peer_states[peer_index] = BLUETOOTH_TRANSPORT_STATE_CONNECTED;
-    transport->last_error_code = 0U;
+    transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_NONE;
     return true;
 #endif
 }
@@ -152,14 +160,14 @@ bool bluetooth_transport_disconnect(bluetooth_transport_t *transport, uint8_t pe
     const size_t peer_index = bluetooth_transport_find_peer_index(transport, peer_id);
 #if defined(PICO_INTERCOM_TARGET)
     if (peer_index >= transport->connected_peer_count) {
-        transport->last_error_code = 0U;
+        transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_NONE;
         transport->pending_pair_peer_id = 0U;
         return true;
     }
 #else
     if (peer_index >= transport->connected_peer_count) {
         transport->error = true;
-        transport->last_error_code = 3U;
+        transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_NOT_CONNECTED;
         return false;
     }
 #endif
@@ -177,7 +185,7 @@ bool bluetooth_transport_disconnect(bluetooth_transport_t *transport, uint8_t pe
     }
 
     transport->pending_pair_peer_id = 0U;
-    transport->last_error_code = 0U;
+    transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_NONE;
     return true;
 }
 
@@ -190,7 +198,7 @@ bool bluetooth_transport_restore_pairing(bluetooth_transport_t *transport, uint8
         return false;
     }
 
-    transport->last_error_code = 0U;
+    transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_NONE;
     return true;
 }
 
@@ -236,7 +244,7 @@ bool bluetooth_transport_queue_packet(bluetooth_transport_t *transport, uint8_t 
 
     if (transport->queued_packet_count >= BLUETOOTH_TRANSPORT_QUEUE_DEPTH) {
         transport->packets_dropped++;
-        transport->last_error_code = 4U;
+        transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_QUEUE_FULL;
         return false;
     }
 
@@ -255,7 +263,7 @@ bool bluetooth_transport_queue_packet(bluetooth_transport_t *transport, uint8_t 
     transport->packets_queued++;
     transport->last_source_peer = source_peer;
     transport->last_target_peer = target_peer;
-    transport->last_error_code = 0U;
+    transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_NONE;
     return true;
 }
 

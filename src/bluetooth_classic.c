@@ -192,7 +192,7 @@ static uint32_t now_ms(void) {
 }
 
 static void make_short_name(char *buffer, size_t buffer_len, uint8_t peer_id) {
-    if (buffer == NULL || buffer_len == 0U) {
+    if (buffer == NULL || buffer_len < 5U) {
         return;
     }
 
@@ -260,6 +260,7 @@ static void update_advertising_data(bluetooth_classic_stack_t *stack) {
         0x03, BLUETOOTH_DATA_TYPE_COMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS,
         (uint8_t)(INTERCOM_SERVICE_UUID16 & 0xFFU),
         (uint8_t)((INTERCOM_SERVICE_UUID16 >> 8) & 0xFFU),
+        /* 0xFFFF is used here only as a development-time manufacturer marker. */
         0x04, BLUETOOTH_DATA_TYPE_MANUFACTURER_SPECIFIC_DATA, 0xFF, 0xFF,
         stack->transport.local_peer_id,
     };
