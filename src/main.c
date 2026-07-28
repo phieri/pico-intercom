@@ -119,6 +119,7 @@ int main(void) {
     uint32_t last_audio_tick_ms = 0U;
     size_t last_reported_ready_peers = 0U;
     uint32_t last_reported_error = UINT32_MAX;
+    uint32_t last_status_report_ms = 0U;
 
     intercom_init(&intercom);
     intercom_enable(&intercom, true);
@@ -199,12 +200,17 @@ int main(void) {
 
         if (bluetooth.session_ready_peer_count != last_reported_ready_peers ||
             bluetooth.last_error_code != last_reported_error) {
-            printf("Bluetooth status: transport=%s, sessions=%zu, connected_peers=%zu, last_error=%s.\n",
-                   bluetooth_runtime_has_transport(&bluetooth) ? "ready" : "down",
-                   bluetooth.session_ready_peer_count, bluetooth.connected_peer_count,
-                   bluetooth_error_name(bluetooth.last_error_code));
-            last_reported_ready_peers = bluetooth.session_ready_peer_count;
-            last_reported_error = bluetooth.last_error_code;
+            if ((now_ms - last_status_report_ms) >= 1000U ||
+                bluetooth.session_ready_peer_count == 0U ||
+                last_reported_ready_peers == 0U) {
+                printf("Bluetooth status: transport=%s, sessions=%zu, connected_peers=%zu, last_error=%s.\n",
+                       bluetooth_runtime_has_transport(&bluetooth) ? "ready" : "down",
+                       bluetooth.session_ready_peer_count, bluetooth.connected_peer_count,
+                       bluetooth_error_name(bluetooth.last_error_code));
+                last_status_report_ms = now_ms;
+                last_reported_ready_peers = bluetooth.session_ready_peer_count;
+                last_reported_error = bluetooth.last_error_code;
+            }
         }
 
         update_status_led(&bluetooth, pairing_in_progress, pairing_error, now_ms);

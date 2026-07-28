@@ -229,11 +229,13 @@ static void bluetooth_record_relay(bluetooth_runtime_t *runtime, uint8_t source_
         return;
     }
 
+    if (runtime->pending_relay_target_count >= INTERCOM_MAX_PEERS) {
+        return;
+    }
+
     runtime->last_relay_source_peer = source_peer;
     runtime->last_relay_target = target_peer;
-    if (runtime->pending_relay_target_count < INTERCOM_MAX_PEERS) {
-        runtime->relay_targets[runtime->pending_relay_target_count++] = target_peer;
-    }
+    runtime->relay_targets[runtime->pending_relay_target_count++] = target_peer;
 
     runtime->last_relay_payload_len = payload_len;
     if (runtime->last_relay_payload_len > BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN) {
@@ -341,9 +343,12 @@ static uint8_t bluetooth_derive_local_peer_id(void) {
     for (size_t index = 0; index < sizeof(board_id.id); ++index) {
         crc ^= board_id.id[index];
         for (uint8_t bit = 0U; bit < 8U; ++bit) {
+            /* CRC-8 with polynomial 0x07 gives a better spread than a raw XOR fold
+             * before we compress the result into the firmware's 1-250 peer-ID range. */
             crc = (crc & 0x80U) != 0U ? (uint8_t)((crc << 1U) ^ 0x07U) : (uint8_t)(crc << 1U);
         }
     }
+    /* Keep peer IDs in 1-250 and leave the top values free for future protocol sentinels. */
     return (uint8_t)((crc % 250U) + 1U);
 #else
     return 1U;
@@ -405,7 +410,6 @@ static bool bluetooth_queue_protocol_message(bluetooth_runtime_t *runtime, uint8
         bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_SATURATED);
         return false;
     }
-    runtime->protocol_messages_sent++;
     runtime->protocol_messages_sent++;
     if (message_type == INTERCOM_PROTOCOL_MESSAGE_HELLO ||
         message_type == INTERCOM_PROTOCOL_MESSAGE_HELLO_ACK) {
@@ -513,9 +517,12 @@ static void bluetooth_service_protocol_links(bluetooth_runtime_t *runtime) {
 
         if (!link->session_active) {
             if (now_ms - link->last_handshake_ms >= BLUETOOTH_HANDSHAKE_RETRY_MS) {
+                const bool first_handshake_attempt = !link->hello_sent;
                 if (bluetooth_send_hello(runtime, link->peer_id, INTERCOM_PROTOCOL_MESSAGE_HELLO)) {
-                    printf("Bluetooth session handshake with peer %u in progress.\n",
-                           (unsigned)link->peer_id);
+                    if (first_handshake_attempt) {
+                        printf("Bluetooth session handshake with peer %u in progress.\n",
+                               (unsigned)link->peer_id);
+                    }
                 }
             }
             continue;
@@ -1104,8 +1111,12 @@ bool bluetooth_handle_transport_payload(bluetooth_runtime_t *runtime, uint8_t so
                                                 "session not ready");
             return false;
         }
-        if (link->last_audio_sequence != 0U && message.sequence > link->last_audio_sequence + 1U) {
-            link->missing_audio_frames += (uint32_t)(message.sequence - link->last_audio_sequence - 1U);
+        if (link->last_audio_sequence != 0U) {
+            const uint16_t expected_next_sequence = (uint16_t)(link->last_audio_sequence + 1U);
+            const uint16_t audio_gap = (uint16_t)(message.sequence - expected_next_sequence);
+            if (audio_gap > 0U && audio_gap < 0x8000U) {
+                link->missing_audio_frames += (uint32_t)audio_gap;
+            }
         }
         link->last_audio_sequence = message.sequence;
         bluetooth_handle_protocol_audio(runtime, source_peer, message.payload, message.payload_len);

@@ -95,7 +95,8 @@ int main(void) {
     static const uint8_t payload[] = {0x01, 0x02, 0x03};
     enum {
         TEST_PAIRING_PEER_ID = 4U,
-        TEST_PROTOCOL_PEER_ID = 6U,
+        TEST_PROTOCOL_RUNTIME_PEER_ID = 6U,
+        TEST_TIMEOUT_RUNTIME_PEER_ID = 7U,
     };
 
     intercom_init(&state);
@@ -347,11 +348,11 @@ int main(void) {
     intercom_state_t protocol_state;
     intercom_init(&protocol_state);
     intercom_enable(&protocol_state, true);
-    assert(intercom_add_peer(&protocol_state, TEST_PROTOCOL_PEER_ID));
+    assert(intercom_add_peer(&protocol_state, TEST_PROTOCOL_RUNTIME_PEER_ID));
     bluetooth_init(&protocol_runtime, &protocol_state);
-    assert(bluetooth_connect_peer(&protocol_runtime, TEST_PROTOCOL_PEER_ID));
+    assert(bluetooth_connect_peer(&protocol_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID));
     const bluetooth_peer_link_t *protocol_link =
-        find_peer_link(&protocol_runtime, TEST_PROTOCOL_PEER_ID);
+        find_peer_link(&protocol_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID);
     assert(protocol_link != NULL);
     uint8_t inbound_audio[BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN] = {0};
     size_t inbound_audio_len = 0U;
@@ -360,31 +361,33 @@ int main(void) {
     size_t inbound_packet_len = 0U;
     assert(encode_protocol_message(protocol_packet, sizeof(protocol_packet),
                                    INTERCOM_PROTOCOL_MESSAGE_AUDIO, protocol_link->session_id,
-                                   2U, TEST_PROTOCOL_PEER_ID, protocol_runtime.local_peer_id,
+                                   2U, TEST_PROTOCOL_RUNTIME_PEER_ID, protocol_runtime.local_peer_id,
                                    inbound_audio, (uint16_t)inbound_audio_len,
                                    &inbound_packet_len));
-    assert(bluetooth_handle_transport_payload(&protocol_runtime, TEST_PROTOCOL_PEER_ID,
+    assert(bluetooth_handle_transport_payload(&protocol_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID,
                                               protocol_packet, inbound_packet_len));
     const size_t protocol_received = protocol_runtime.packets_received;
-    assert(!bluetooth_handle_transport_payload(&protocol_runtime, TEST_PROTOCOL_PEER_ID,
+    const size_t dropped_before_duplicate = protocol_runtime.protocol_messages_dropped;
+    assert(!bluetooth_handle_transport_payload(&protocol_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID,
                                                protocol_packet, inbound_packet_len));
     assert(protocol_runtime.packets_received == protocol_received);
+    assert(protocol_runtime.protocol_messages_dropped == dropped_before_duplicate + 1U);
     size_t wrong_target_len = 0U;
     assert(encode_protocol_message(protocol_packet, sizeof(protocol_packet),
                                    INTERCOM_PROTOCOL_MESSAGE_AUDIO, protocol_link->session_id,
-                                   3U, TEST_PROTOCOL_PEER_ID, 99U, inbound_audio,
+                                   3U, TEST_PROTOCOL_RUNTIME_PEER_ID, 99U, inbound_audio,
                                    (uint16_t)inbound_audio_len, &wrong_target_len));
-    assert(!bluetooth_handle_transport_payload(&protocol_runtime, TEST_PROTOCOL_PEER_ID,
+    assert(!bluetooth_handle_transport_payload(&protocol_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID,
                                                protocol_packet, wrong_target_len));
-    assert(protocol_runtime.last_error_code == 6U);
+    assert(strcmp(bluetooth_error_name(protocol_runtime.last_error_code), "protocol") == 0);
 
     bluetooth_runtime_t timeout_runtime = {0};
     intercom_state_t timeout_state;
     intercom_init(&timeout_state);
     intercom_enable(&timeout_state, true);
     bluetooth_init(&timeout_runtime, &timeout_state);
-    assert(bluetooth_restore_pairing(&timeout_runtime, 7U));
-    assert(bluetooth_connect_peer(&timeout_runtime, 7U));
+    assert(bluetooth_restore_pairing(&timeout_runtime, TEST_TIMEOUT_RUNTIME_PEER_ID));
+    assert(bluetooth_connect_peer(&timeout_runtime, TEST_TIMEOUT_RUNTIME_PEER_ID));
     assert(bluetooth_runtime_is_operational(&timeout_runtime));
     for (size_t index = 0; index < 60U; ++index) {
         bluetooth_poll(&timeout_runtime);
