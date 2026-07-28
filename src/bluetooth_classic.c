@@ -16,7 +16,9 @@ enum {
     INTERCOM_TX_UUID16 = 0xFFF1,
     INTERCOM_RX_UUID16 = 0xFFF2,
     INTERCOM_ADV_FLAGS = 0x06,
-    INTERCOM_MAX_SERVER_OUTBOX = BLUETOOTH_TRANSPORT_QUEUE_DEPTH
+    INTERCOM_MAX_SERVER_OUTBOX = BLUETOOTH_TRANSPORT_QUEUE_DEPTH,
+    INTERCOM_TRANSPORT_ERROR_NONE = 0U,
+    INTERCOM_TRANSPORT_ERROR_PEER_LIMIT = 2U
 };
 
 typedef enum {
@@ -146,7 +148,7 @@ static void transport_mark_connected(bluetooth_transport_t *transport, uint8_t p
 
     if (transport->connected_peer_count >= INTERCOM_MAX_PEERS) {
         transport->error = true;
-        transport->last_error_code = 2U;
+        transport->last_error_code = INTERCOM_TRANSPORT_ERROR_PEER_LIMIT;
         return;
     }
 
@@ -154,7 +156,7 @@ static void transport_mark_connected(bluetooth_transport_t *transport, uint8_t p
     transport->connected_peers[slot] = peer_id;
     transport->peer_states[slot] = BLUETOOTH_TRANSPORT_STATE_CONNECTED;
     transport->pending_pair_peer_id = 0U;
-    transport->last_error_code = 0U;
+    transport->last_error_code = INTERCOM_TRANSPORT_ERROR_NONE;
 }
 
 static void transport_mark_disconnected(bluetooth_transport_t *transport, uint8_t peer_id) {
@@ -575,13 +577,14 @@ static void hci_event_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
             return;
         }
         {
-            uint8_t peer_id = 0U;
-            if (!advertisement_get_peer_id(packet, &peer_id) || peer_id == stack->transport.local_peer_id) {
+            uint8_t advertised_peer_id = 0U;
+            if (!advertisement_get_peer_id(packet, &advertised_peer_id) ||
+                advertised_peer_id == stack->transport.local_peer_id) {
                 return;
             }
 
             bluetooth_transport_peer_info_t *peer =
-                transport_get_discovered_peer(&stack->transport, peer_id, true);
+                transport_get_discovered_peer(&stack->transport, advertised_peer_id, true);
             if (peer == NULL) {
                 return;
             }
@@ -593,11 +596,11 @@ static void hci_event_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
                 make_short_name(peer->name, sizeof(peer->name), peer_id);
             }
 
-            if ((stack->transport.pending_pair_peer_id == peer_id ||
-                 transport_has_remembered_peer(&stack->transport, peer_id)) &&
+            if ((stack->transport.pending_pair_peer_id == advertised_peer_id ||
+                 transport_has_remembered_peer(&stack->transport, advertised_peer_id)) &&
                 bluetooth_ble_backend.con_handle == HCI_CON_HANDLE_INVALID &&
                 bluetooth_ble_backend.state == TARGET_STATE_SCANNING) {
-                connect_to_peer(stack, peer_id);
+                connect_to_peer(stack, advertised_peer_id);
             }
         }
         break;

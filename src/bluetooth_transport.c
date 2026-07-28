@@ -242,6 +242,13 @@ bool bluetooth_transport_queue_packet(bluetooth_transport_t *transport, uint8_t 
         return false;
     }
 
+    if (!bluetooth_transport_is_connected(transport, source_peer) &&
+        !bluetooth_transport_is_connected(transport, target_peer)) {
+        transport->error = true;
+        transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_NOT_CONNECTED;
+        return false;
+    }
+
     if (transport->queued_packet_count >= BLUETOOTH_TRANSPORT_QUEUE_DEPTH) {
         transport->packets_dropped++;
         transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_QUEUE_FULL;
