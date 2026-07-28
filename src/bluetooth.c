@@ -294,7 +294,16 @@ bool bluetooth_toggle(bluetooth_runtime_t *runtime) {
         return false;
     }
 
-    runtime->enabled = !runtime->enabled;
+    const bool requested_enabled = !runtime->enabled;
+    if (!bluetooth_platform_set_enabled(runtime, requested_enabled)) {
+        runtime->enabled = false;
+        intercom_audio_set_enabled(&runtime->audio, false);
+        bluetooth_classic_stack_set_enabled(&runtime->classic_stack, false);
+        bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_DISABLED);
+        return false;
+    }
+
+    runtime->enabled = requested_enabled;
     intercom_audio_set_enabled(&runtime->audio, runtime->enabled);
     bluetooth_classic_stack_set_enabled(&runtime->classic_stack, runtime->enabled);
     if (!runtime->enabled) {
