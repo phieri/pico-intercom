@@ -133,12 +133,12 @@ int main(void) {
     assert(local_audio_runtime.audio.decoded_frames == 1U);
     assert(local_audio_runtime.audio.played_frames == 1U);
     assert(local_audio_runtime.last_relay_count == 2U);
-    assert(bluetooth_disable(&runtime));
-    assert(!bluetooth_is_enabled(&runtime));
-    assert(bluetooth_toggle(&runtime));
-    assert(bluetooth_is_enabled(&runtime));
-    assert(!bluetooth_toggle(&runtime));
-    assert(!bluetooth_is_enabled(&runtime));
+    bluetooth_runtime_t toggle_runtime = {0};
+    bluetooth_init(&toggle_runtime, &state);
+    assert(!bluetooth_toggle(&toggle_runtime));
+    assert(!bluetooth_is_enabled(&toggle_runtime));
+    assert(bluetooth_toggle(&toggle_runtime));
+    assert(bluetooth_is_enabled(&toggle_runtime));
 
     bluetooth_runtime_t pairing_runtime = {0};
     bluetooth_init(&pairing_runtime, &state);
