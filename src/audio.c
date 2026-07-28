@@ -1,5 +1,9 @@
 #include "audio.h"
 
+#if defined(PICO_INTERCOM_TARGET)
+#include <stdio.h>
+#endif
+
 #include <string.h>
 
 static uint16_t audio_read_u16_le(const uint8_t *buffer) {
@@ -42,6 +46,7 @@ static void audio_generate_samples(intercom_audio_subsystem_t *audio, intercom_a
     }
 }
 
+
 void intercom_audio_init(intercom_audio_subsystem_t *audio) {
     if (audio == NULL) {
         return;
@@ -56,6 +61,11 @@ void intercom_audio_init(intercom_audio_subsystem_t *audio) {
     audio->bits_per_sample = INTERCOM_AUDIO_BITS_PER_SAMPLE;
     audio->samples_per_frame = INTERCOM_AUDIO_SAMPLES_PER_FRAME;
     audio->next_sequence = 1U;
+
+#if defined(PICO_INTERCOM_TARGET)
+    (void)fprintf(stderr,
+                  "Audio backend uses software-generated PCM frames; no direct ADC/PWM audio hardware is required.\n");
+#endif
 }
 
 void intercom_audio_set_enabled(intercom_audio_subsystem_t *audio, bool enabled) {

@@ -2,6 +2,7 @@
 
 #if defined(PICO_INTERCOM_TARGET)
 #include "pico/stdlib.h"
+#include "pico/cyw43_arch.h"
 #endif
 
 #include <stdio.h>
@@ -183,6 +184,32 @@ static void bluetooth_reset_peer_states(bluetooth_runtime_t *runtime) {
     }
 }
 
+#if defined(PICO_INTERCOM_TARGET)
+static bool bluetooth_platform_initialize_target(bluetooth_runtime_t *runtime) {
+    if (runtime == NULL) {
+        return false;
+    }
+
+    if (runtime->platform_initialized && !runtime->platform_error) {
+        return true;
+    }
+
+    const int cyw43_status = cyw43_arch_init();
+    if (cyw43_status != 0) {
+        runtime->platform_error = true;
+        fprintf(stderr, "Bluetooth backend init failed: cyw43_arch_init returned %d\n", cyw43_status);
+        return false;
+    }
+
+    runtime->platform_initialized = true;
+    runtime->platform_error = false;
+    runtime->advertising = true;
+    runtime->scanning = false;
+    printf("Bluetooth radio backend active; CYW43 transport initialized.\n");
+    return true;
+}
+#endif
+
 static bool bluetooth_platform_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
 #if defined(PICO_INTERCOM_TARGET)
     if (runtime == NULL) {
@@ -190,17 +217,17 @@ static bool bluetooth_platform_set_enabled(bluetooth_runtime_t *runtime, bool en
     }
 
     if (enabled) {
-        if (runtime->platform_initialized) {
-            return true;
-        }
+        return bluetooth_platform_initialize_target(runtime);
+    }
 
-        runtime->platform_initialized = true;
-        runtime->platform_error = false;
-        return true;
+    if (runtime->platform_initialized) {
+        cyw43_arch_deinit();
     }
 
     runtime->platform_initialized = false;
     runtime->platform_error = false;
+    runtime->advertising = false;
+    runtime->scanning = false;
     return true;
 #else
     (void)runtime;

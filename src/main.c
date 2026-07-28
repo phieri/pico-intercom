@@ -140,6 +140,11 @@ int main(void) {
     }
 
     printf("Pico intercom ready.\n");
+    if (bluetooth_runtime_is_operational(&bluetooth)) {
+        printf("Bluetooth runtime operational; CYW43 wireless backend initialized.\n");
+    } else {
+        printf("Bluetooth runtime unavailable; check the radio backend initialization.\n");
+    }
     if (persisted_count == 0U) {
         printf("No persisted pairings found; press the onboard button to start pairing.\n");
     } else {
