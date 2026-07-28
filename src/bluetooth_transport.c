@@ -31,22 +31,6 @@ static bool bluetooth_transport_remember_peer(bluetooth_transport_t *transport, 
         if (transport->remembered_peers[index] == peer_id) {
             return true;
         }
-
-        static bool bluetooth_transport_peer_is_discovered(const bluetooth_transport_t *transport,
-                                                           uint8_t peer_id) {
-            if (transport == NULL) {
-                return false;
-            }
-
-            for (size_t index = 0; index < INTERCOM_MAX_PEERS; ++index) {
-                if (transport->discovered_peers[index].valid &&
-                    transport->discovered_peers[index].peer_id == peer_id) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
     }
 
     if (transport->remembered_peer_count >= INTERCOM_MAX_PEERS) {
@@ -57,6 +41,22 @@ static bool bluetooth_transport_remember_peer(bluetooth_transport_t *transport, 
 
     transport->remembered_peers[transport->remembered_peer_count++] = peer_id;
     return true;
+}
+
+static bool bluetooth_transport_peer_is_discovered(const bluetooth_transport_t *transport,
+                                                   uint8_t peer_id) {
+    if (transport == NULL) {
+        return false;
+    }
+
+    for (size_t index = 0; index < INTERCOM_MAX_PEERS; ++index) {
+        if (transport->discovered_peers[index].valid &&
+            transport->discovered_peers[index].peer_id == peer_id) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void bluetooth_transport_init(bluetooth_transport_t *transport) {

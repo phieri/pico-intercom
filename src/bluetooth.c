@@ -182,6 +182,7 @@ static void bluetooth_sync_connected_peers(bluetooth_runtime_t *runtime) {
         return;
     }
 
+#if defined(PICO_INTERCOM_TARGET)
     runtime->connected_peer_count = runtime->classic_stack.transport.connected_peer_count;
     for (size_t index = 0; index < runtime->connected_peer_count; ++index) {
         runtime->connected_peers[index] = runtime->classic_stack.transport.connected_peers[index];
@@ -190,6 +191,9 @@ static void bluetooth_sync_connected_peers(bluetooth_runtime_t *runtime) {
     for (size_t index = runtime->connected_peer_count; index < INTERCOM_MAX_PEERS; ++index) {
         runtime->peer_states[index] = BLUETOOTH_PEER_STATE_DISCONNECTED;
     }
+#else
+    (void)runtime;
+#endif
 }
 
 static uint8_t bluetooth_target_local_peer_id(void) {
