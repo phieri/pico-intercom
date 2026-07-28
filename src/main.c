@@ -75,7 +75,7 @@ static void init_status_led(void) {
 
 static void update_status_led(const bluetooth_runtime_t *bluetooth, bool pairing_in_progress,
                               bool pairing_error, uint32_t now_ms) {
-    if (bluetooth == NULL || !bluetooth_runtime_is_operational(bluetooth)) {
+    if (bluetooth == NULL || !bluetooth_runtime_has_transport(bluetooth)) {
         gpio_put(PICO_INTERCOM_STATUS_LED_PIN, 0);
         return;
     }
@@ -117,6 +117,8 @@ int main(void) {
     bool pairing_error = false;
     uint32_t pairing_started_ms = 0U;
     uint32_t last_audio_tick_ms = 0U;
+    size_t last_reported_ready_peers = 0U;
+    uint32_t last_reported_error = UINT32_MAX;
 
     intercom_init(&intercom);
     intercom_enable(&intercom, true);
@@ -138,10 +140,10 @@ int main(void) {
 
     printf("Pico intercom ready.\n");
     printf("Local Bluetooth peer id: %u.\n", (unsigned)bluetooth.local_peer_id);
-    if (bluetooth_runtime_is_operational(&bluetooth)) {
-        printf("Bluetooth runtime operational; CYW43 + BTstack backend initialized.\n");
+    if (bluetooth_runtime_has_transport(&bluetooth)) {
+        printf("Bluetooth transport ready; CYW43 + BTstack backend initialized.\n");
     } else {
-        printf("Bluetooth runtime unavailable; check CYW43/BTstack initialization.\n");
+        printf("Bluetooth transport unavailable; check CYW43/BTstack initialization.\n");
     }
     if (persisted_count == 0U) {
         printf("No persisted Bluetooth pairings found; press the onboard button to pair.\n");
@@ -154,28 +156,33 @@ int main(void) {
         const bool pairing_button_pressed = !gpio_get(PICO_INTERCOM_PAIR_BUTTON_PIN);
         const uint32_t now_ms = to_ms_since_boot(get_absolute_time());
         bluetooth_poll(&bluetooth);
+        if (bluetooth.pairing_completed && bluetooth.completed_pairing_peer_id != 0U) {
+            const uint8_t paired_peer_id = bluetooth.completed_pairing_peer_id;
+            pairing_t completed_pairing = make_pairing(paired_peer_id);
+            printf("Persisting Bluetooth pairing for peer %u.\n", (unsigned)paired_peer_id);
+            if (pairing_store_save(&pairing_store, &completed_pairing)) {
+                printf("Bluetooth pairing complete for peer %u; session is operational.\n",
+                       (unsigned)paired_peer_id);
+            } else {
+                bluetooth.storage_error = true;
+                pairing_error = true;
+                printf("Bluetooth session reached peer %u but pairing persistence failed.\n",
+                       (unsigned)paired_peer_id);
+            }
+            bluetooth.pairing_completed = false;
+            bluetooth.completed_pairing_peer_id = 0U;
+        }
         if (pairing_button_pressed && !pairing_button_was_pressed) {
             pairing_in_progress = true;
             pairing_error = false;
             pairing_started_ms = now_ms;
             if (bluetooth_handle_pairing_button(&bluetooth, PICO_INTERCOM_PAIR_BUTTON_PEER_ID,
                                                 true)) {
-                const uint8_t paired_peer_id = bluetooth.pairing_peer_id != 0U
-                                                   ? bluetooth.pairing_peer_id
-                                                   : PICO_INTERCOM_PAIR_BUTTON_PEER_ID;
-                pairing_t button_pairing = make_pairing(paired_peer_id);
-                printf("Persisting Bluetooth pairing for peer %u.\n", (unsigned)paired_peer_id);
-                if (pairing_store_save(&pairing_store, &button_pairing)) {
-                    printf("Bluetooth pairing complete for peer %u.\n", (unsigned)paired_peer_id);
-                } else {
-                    bluetooth.storage_error = true;
-                    pairing_error = true;
-                    printf("Bluetooth pairing connected but failed to persist peer %u.\n",
-                           (unsigned)paired_peer_id);
-                }
+                printf("Bluetooth pairing started for peer %u; waiting for session readiness.\n",
+                       (unsigned)bluetooth.pairing_peer_id);
             } else {
                 pairing_error = true;
-                printf("No Bluetooth peer was available to pair.\n");
+                printf("Bluetooth pairing could not start; no suitable peer is ready.\n");
             }
         }
 
@@ -184,10 +191,20 @@ int main(void) {
             pairing_in_progress = false;
         }
 
-        if (bluetooth_runtime_is_operational(&bluetooth) && intercom.enabled && intercom.ptt_pressed &&
-            (now_ms - last_audio_tick_ms) >= PICO_INTERCOM_AUDIO_POLL_MS) {
+        if (bluetooth_runtime_is_operational(&bluetooth) && intercom.enabled &&
+            intercom.ptt_pressed && (now_ms - last_audio_tick_ms) >= PICO_INTERCOM_AUDIO_POLL_MS) {
             (void)bluetooth_process_local_audio(&bluetooth, bluetooth.local_peer_id);
             last_audio_tick_ms = now_ms;
+        }
+
+        if (bluetooth.session_ready_peer_count != last_reported_ready_peers ||
+            bluetooth.last_error_code != last_reported_error) {
+            printf("Bluetooth status: transport=%s, sessions=%zu, connected_peers=%zu, last_error=%s.\n",
+                   bluetooth_runtime_has_transport(&bluetooth) ? "ready" : "down",
+                   bluetooth.session_ready_peer_count, bluetooth.connected_peer_count,
+                   bluetooth_error_name(bluetooth.last_error_code));
+            last_reported_ready_peers = bluetooth.session_ready_peer_count;
+            last_reported_error = bluetooth.last_error_code;
         }
 
         update_status_led(&bluetooth, pairing_in_progress, pairing_error, now_ms);

@@ -2,7 +2,7 @@
 
 `pico-intercom` is a Raspberry Pi Pico 2 W firmware project for a local **Bluetooth Low Energy** intercom.
 
-The host build still uses a software transport for fast tests, but the Pico 2 W firmware now uses the CYW43 radio with **BTstack BLE** for real on-device discovery, pairing, connection, and packet relay.
+The host build still uses a software transport for fast tests, but the Pico 2 W firmware now uses the CYW43 radio with **BTstack BLE** for real on-device discovery, pairing, connection, session negotiation, keepalive handling, and packet relay.
 
 ## Chosen wireless backend
 
@@ -25,8 +25,27 @@ On hardware, the firmware:
 4. advertises a BLE intercom service and scans for other Pico intercom peers
 5. restores remembered peer IDs from flash-backed pairing storage
 6. attempts reconnect when a remembered peer is discovered again
-7. lets the onboard pairing button connect to a discovered peer
-8. relays intercom audio frames over the BLE link when connected
+7. performs an application-level session handshake before treating a link as usable
+8. lets the onboard pairing button request pairing with a discovered peer
+9. only reports the intercom path as operational once a session is established
+10. relays intercom audio frames over the BLE link while keepalives are healthy
+
+## Intercom protocol
+
+Runtime traffic is wrapped in a small application protocol carried inside the custom
+BLE GATT characteristics.
+
+- `HELLO`: announces peer identity and starts or resets a session
+- `HELLO_ACK`: confirms that the remote peer accepted the session
+- `KEEPALIVE`: keeps an established session alive and helps detect stale links
+- `AUDIO`: carries encoded PCM frames
+- `ERROR`: reports decode, routing, session, and saturation failures
+- `GOODBYE`: requests a clean session shutdown
+
+Each message carries a source peer ID, target peer ID, session ID, sequence number,
+and acknowledgment sequence. The runtime drops duplicate or stale audio frames,
+tracks missing sequence gaps, and does not mark the link operational until the
+session handshake completes.
 
 ## Practical limitations
 
@@ -34,6 +53,7 @@ On hardware, the firmware:
 - Audio is still software-generated PCM in this repository; no microphone codec or speaker DAC path is wired yet.
 - BLE bandwidth is lower than Wi-Fi, so this is a practical firmware path for real radio validation and transport integration, not a production audio stack.
 - Pairing is based on BLE discovery plus bonding/connection state through BTstack; there is no UI beyond USB serial logs and the onboard button/LED.
+- CI validates the host-side logic and the firmware build, but it cannot prove live radio interoperability inside this environment.
 
 ## Hardware requirements
 
@@ -78,16 +98,39 @@ The build produces a UF2 image for the Pico 2 W.
 
 1. Flash the same firmware to two Pico 2 W boards.
 2. Open USB serial on both boards.
-3. Wait for each board to report its local Bluetooth peer ID and that the BLE runtime is active.
+3. Wait for each board to report its local Bluetooth peer ID and that the BLE transport is ready.
 4. Press the onboard pairing button on one board once the other board is visible.
-5. Watch the serial log for connection messages.
-6. Once connected, the firmware will start relaying generated intercom frames over BLE while PTT is active.
+5. Watch the serial log for discovery, pairing request, session handshake, and operational-state messages.
+6. Confirm that the log reports at least one active session before expecting audio traffic.
+7. Once connected, the firmware will start relaying generated intercom frames over BLE while PTT is active.
+
+If the radio drops, the session times out, or the peer resets, the runtime reports the
+failure explicitly and falls back to scanning so remembered peers can reconnect.
 
 ## Pairing persistence
 
 - Remembered peers are stored in flash on Pico targets.
 - On boot, the firmware reloads remembered peer IDs and reconnects when those peers advertise again.
+- Pairing is only persisted once the peer session is actually operational.
 - If flash persistence fails, the runtime reports it over USB serial and keeps the transport marked degraded.
+
+## Validation
+
+- Fast regression path:
+  ```sh
+  cmake -S . -B build -DPICO_INTERCOM_FORCE_HOST_BUILD=ON -DPICO_INTERCOM_BUILD_HOST_TESTS=ON
+  cmake --build build
+  ctest --test-dir build --output-on-failure
+  ```
+- Firmware build path:
+  ```sh
+  cmake -S . -B build-firmware -DPICO_BOARD=pico2_w -DPICO_SDK_PATH=$PWD/pico-sdk
+  cmake --build build-firmware
+  ```
+
+The host test suite covers protocol framing, pairing persistence, session establishment,
+audio relaying, duplicate-packet rejection, and timeout handling. Hardware validation
+still requires two physical Pico 2 W boards.
 
 ## Source layout
 

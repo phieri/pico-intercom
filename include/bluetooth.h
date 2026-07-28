@@ -8,6 +8,7 @@
 #include "audio.h"
 #include "bluetooth_classic.h"
 #include "intercom.h"
+#include "intercom_protocol.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,6 +34,32 @@ typedef enum {
     BLUETOOTH_PEER_STATE_CONNECTED,
     BLUETOOTH_PEER_STATE_DISCONNECTING
 } bluetooth_peer_state_t;
+
+typedef enum {
+    BLUETOOTH_LINK_STATE_IDLE = 0,
+    BLUETOOTH_LINK_STATE_CONNECTING,
+    BLUETOOTH_LINK_STATE_HANDSHAKING,
+    BLUETOOTH_LINK_STATE_READY,
+    BLUETOOTH_LINK_STATE_DEGRADED
+} bluetooth_link_state_t;
+
+typedef struct {
+    bool valid;
+    bool remembered;
+    bool session_active;
+    bool hello_sent;
+    bool hello_received;
+    uint8_t peer_id;
+    uint32_t session_id;
+    uint16_t next_tx_sequence;
+    uint16_t last_rx_sequence;
+    uint16_t last_audio_sequence;
+    uint32_t last_activity_ms;
+    uint32_t last_handshake_ms;
+    uint32_t dropped_messages;
+    uint32_t missing_audio_frames;
+    bluetooth_link_state_t link_state;
+} bluetooth_peer_link_t;
 
 typedef struct {
     intercom_state_t *intercom;
@@ -68,9 +95,11 @@ typedef struct {
     size_t failed_connections;
     size_t failed_disconnections;
     bool pairing_in_progress;
+    bool pairing_completed;
     bool pairing_error;
     bool storage_error;
     uint8_t pairing_peer_id;
+    uint8_t completed_pairing_peer_id;
     uint8_t last_error_peer_id;
     uint32_t last_error_code;
     bluetooth_command_id_t last_command;
@@ -81,6 +110,12 @@ typedef struct {
     size_t transport_packets_dropped;
     uint8_t last_transport_source_peer;
     uint8_t last_transport_target_peer;
+    size_t protocol_messages_sent;
+    size_t protocol_messages_received;
+    size_t protocol_messages_dropped;
+    size_t session_ready_peer_count;
+    uint32_t last_status_ms;
+    bluetooth_peer_link_t peer_links[INTERCOM_MAX_PEERS];
     intercom_audio_subsystem_t audio;
     bluetooth_classic_stack_t classic_stack;
 } bluetooth_runtime_t;
@@ -90,6 +125,7 @@ bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled);
 bool bluetooth_enable(bluetooth_runtime_t *runtime);
 bool bluetooth_disable(bluetooth_runtime_t *runtime);
 bool bluetooth_toggle(bluetooth_runtime_t *runtime);
+bool bluetooth_runtime_has_transport(const bluetooth_runtime_t *runtime);
 bool bluetooth_runtime_is_operational(const bluetooth_runtime_t *runtime);
 bool bluetooth_is_enabled(const bluetooth_runtime_t *runtime);
 bool bluetooth_connect(bluetooth_runtime_t *runtime, uint8_t peer_id);
@@ -110,6 +146,8 @@ bool bluetooth_handle_pairing_button(bluetooth_runtime_t *runtime, uint8_t peer_
 bool bluetooth_restore_pairing(bluetooth_runtime_t *runtime, uint8_t peer_id);
 void bluetooth_poll(bluetooth_runtime_t *runtime);
 bool bluetooth_process_local_audio(bluetooth_runtime_t *runtime, uint8_t source_peer);
+bool bluetooth_handle_transport_payload(bluetooth_runtime_t *runtime, uint8_t source_peer,
+                                       const uint8_t *payload, size_t payload_len);
 void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
                            const uint8_t *payload, size_t payload_len);
 
