@@ -485,11 +485,21 @@ static void bluetooth_note_disconnected_link(bluetooth_runtime_t *runtime, uint8
     }
 
     link->session_active = false;
+    /* Reset the session ID so the next handshake establishes a fresh session after
+     * teardown or reconnect instead of reusing stale state. */
+    link->session_id = 0U;
     link->hello_received = false;
     link->hello_sent = false;
     link->last_rx_sequence = 0U;
     link->last_audio_sequence = 0U;
+    /* Transmission sequences start at 1 so the first outbound frame is
+     * distinguishable from the zero-initialized state while the receiver-side
+     * sequence state is reset to a clean baseline. */
+    link->next_tx_sequence = 1U;
     link->link_state = link->remembered ? BLUETOOTH_LINK_STATE_IDLE : BLUETOOTH_LINK_STATE_DEGRADED;
+    if (runtime->intercom != NULL) {
+        (void)intercom_remove_peer(runtime->intercom, peer_id);
+    }
     bluetooth_refresh_session_ready_count(runtime);
 }
 
@@ -531,7 +541,9 @@ static void bluetooth_service_protocol_links(bluetooth_runtime_t *runtime) {
         }
 
         if (!link->session_active) {
-            if (now_ms - link->last_handshake_ms >= BLUETOOTH_HANDSHAKE_RETRY_MS) {
+            /* Attempt the first HELLO immediately so the runtime can progress to the
+             * session-ready state without waiting for the retry window. */
+            if (!link->hello_sent || now_ms - link->last_handshake_ms >= BLUETOOTH_HANDSHAKE_RETRY_MS) {
                 const bool first_handshake_attempt = !link->hello_sent;
                 if (bluetooth_send_hello(runtime, link->peer_id, INTERCOM_PROTOCOL_MESSAGE_HELLO)) {
                     if (first_handshake_attempt) {
@@ -550,6 +562,7 @@ static void bluetooth_service_protocol_links(bluetooth_runtime_t *runtime) {
             link->session_active = false;
             bluetooth_refresh_session_ready_count(runtime);
             bluetooth_record_error(runtime, link->peer_id, BLUETOOTH_ERROR_NOT_READY);
+            bluetooth_note_disconnected_link(runtime, link->peer_id);
             (void)bluetooth_classic_stack_disconnect(&runtime->classic_stack, link->peer_id);
         } else if (now_ms - link->last_activity_ms >= BLUETOOTH_KEEPALIVE_MS) {
             (void)bluetooth_queue_protocol_message(runtime, link->peer_id,
@@ -758,7 +771,9 @@ bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
     link->last_handshake_ms = 0U;
     runtime->last_error_code = BLUETOOTH_ERROR_NONE;
 
-#if !defined(PICO_INTERCOM_TARGET)
+    /* Keep the intercom relay peer list aligned with the transport link state on
+     * both host and target builds so relays are not left behind after connect or
+     * disconnect transitions. */
     if (runtime->intercom != NULL && !intercom_add_peer(runtime->intercom, peer_id)) {
         (void)bluetooth_classic_stack_disconnect(&runtime->classic_stack, peer_id);
         runtime->failed_disconnections++;
@@ -766,6 +781,7 @@ bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
         return false;
     }
 
+#if !defined(PICO_INTERCOM_TARGET)
     if (!bluetooth_has_peer(runtime, peer_id) && runtime->connected_peer_count < INTERCOM_MAX_PEERS) {
         const size_t peer_index = runtime->connected_peer_count++;
         runtime->connected_peers[peer_index] = peer_id;

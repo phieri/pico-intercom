@@ -24,11 +24,12 @@ On hardware, the firmware:
 3. derives a stable local peer ID from the Pico unique board ID
 4. advertises a BLE intercom service and scans for other Pico intercom peers
 5. restores remembered peer IDs from flash-backed pairing storage
-6. attempts reconnect when a remembered peer is discovered again
+6. attempts reconnect when a remembered peer is discovered again and starts the application-level session handshake immediately
 7. performs an application-level session handshake before treating a link as usable
-8. lets the onboard pairing button request pairing with a discovered peer
-9. only reports the intercom path as operational once a session is established
-10. relays intercom audio frames over the BLE link while keepalives are healthy
+8. keeps the active intercom peer list in sync as sessions connect and disconnect
+9. lets the onboard pairing button request pairing with a discovered peer
+10. only reports the intercom path as operational once a session is established
+11. relays intercom audio frames over the BLE link while keepalives are healthy
 
 ## Intercom protocol
 
@@ -105,7 +106,8 @@ The build produces a UF2 image for the Pico 2 W.
 7. Once connected, the firmware will start relaying generated intercom frames over BLE while PTT is active.
 
 If the radio drops, the session times out, or the peer resets, the runtime reports the
-failure explicitly and falls back to scanning so remembered peers can reconnect.
+failure explicitly, clears the stale peer from the active intercom relay list, and falls
+back to scanning so remembered peers can reconnect.
 
 ## Pairing persistence
 
