@@ -45,9 +45,6 @@
 
 /**
  * Generate a human-readable pairing label for the provided peer ID.
- *
- * The resulting name is persisted with the pairing metadata so paired devices
- * can be distinguished in the runtime state.
  */
 static void pairing_name_from_peer_id(char *buffer, size_t buffer_len, uint8_t peer_id) {
     if (buffer == NULL || buffer_len == 0U) {
@@ -131,50 +128,53 @@ int main(void) {
     if (pairing_store_load(&pairing_store, persisted_pairings, &persisted_count)) {
         for (size_t index = 0; index < persisted_count; ++index) {
             const uint8_t peer_id = persisted_pairings[index].peer_id;
-            if (bluetooth_connect_peer(&bluetooth, peer_id)) {
-                printf("Restored pairing for peer %u.\n", (unsigned)peer_id);
+            if (bluetooth_restore_pairing(&bluetooth, peer_id)) {
+                printf("Restored remembered Bluetooth peer %u.\n", (unsigned)peer_id);
             } else {
-                printf("Failed to restore pairing for peer %u.\n", (unsigned)peer_id);
+                printf("Failed to restore remembered Bluetooth peer %u.\n", (unsigned)peer_id);
             }
         }
     }
 
     printf("Pico intercom ready.\n");
+    printf("Local Bluetooth peer id: %u.\n", (unsigned)bluetooth.local_peer_id);
     if (bluetooth_runtime_is_operational(&bluetooth)) {
-        printf("Bluetooth runtime operational; CYW43 wireless backend initialized.\n");
+        printf("Bluetooth runtime operational; CYW43 + BTstack backend initialized.\n");
     } else {
-        printf("Bluetooth runtime unavailable; check the radio backend initialization.\n");
+        printf("Bluetooth runtime unavailable; check CYW43/BTstack initialization.\n");
     }
     if (persisted_count == 0U) {
-        printf("No persisted pairings found; press the onboard button to start pairing.\n");
+        printf("No persisted Bluetooth pairings found; press the onboard button to pair.\n");
     } else {
-        printf("Loaded %zu persisted pairing(s).\n", persisted_count);
+        printf("Loaded %zu remembered Bluetooth peer(s).\n", persisted_count);
     }
 
 #ifdef PICO_INTERCOM_TARGET
     while (true) {
         const bool pairing_button_pressed = !gpio_get(PICO_INTERCOM_PAIR_BUTTON_PIN);
         const uint32_t now_ms = to_ms_since_boot(get_absolute_time());
+        bluetooth_poll(&bluetooth);
         if (pairing_button_pressed && !pairing_button_was_pressed) {
             pairing_in_progress = true;
             pairing_error = false;
             pairing_started_ms = now_ms;
             if (bluetooth_handle_pairing_button(&bluetooth, PICO_INTERCOM_PAIR_BUTTON_PEER_ID,
-                                                 true)) {
-                pairing_t button_pairing = make_pairing(PICO_INTERCOM_PAIR_BUTTON_PEER_ID);
+                                                true)) {
+                const uint8_t paired_peer_id = bluetooth.pairing_peer_id != 0U
+                                                   ? bluetooth.pairing_peer_id
+                                                   : PICO_INTERCOM_PAIR_BUTTON_PEER_ID;
+                pairing_t button_pairing = make_pairing(paired_peer_id);
                 if (pairing_store_save(&pairing_store, &button_pairing)) {
-                    printf("Pairing complete for peer %u.\n",
-                           (unsigned)PICO_INTERCOM_PAIR_BUTTON_PEER_ID);
+                    printf("Bluetooth pairing complete for peer %u.\n", (unsigned)paired_peer_id);
                 } else {
                     bluetooth.storage_error = true;
                     pairing_error = true;
-                    printf("Pairing connected but failed to persist peer %u.\n",
-                           (unsigned)PICO_INTERCOM_PAIR_BUTTON_PEER_ID);
+                    printf("Bluetooth pairing connected but failed to persist peer %u.\n",
+                           (unsigned)paired_peer_id);
                 }
             } else {
                 pairing_error = true;
-                printf("Pairing request rejected for peer %u.\n",
-                       (unsigned)PICO_INTERCOM_PAIR_BUTTON_PEER_ID);
+                printf("No Bluetooth peer was available to pair.\n");
             }
         }
 
@@ -185,7 +185,7 @@ int main(void) {
 
         if (bluetooth_runtime_is_operational(&bluetooth) && intercom.enabled && intercom.ptt_pressed &&
             (now_ms - last_audio_tick_ms) >= PICO_INTERCOM_AUDIO_POLL_MS) {
-            (void)bluetooth_process_local_audio(&bluetooth, PICO_INTERCOM_LOCAL_PEER_ID);
+            (void)bluetooth_process_local_audio(&bluetooth, bluetooth.local_peer_id);
             last_audio_tick_ms = now_ms;
         }
 

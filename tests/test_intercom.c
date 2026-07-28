@@ -142,6 +142,8 @@ int main(void) {
 
     bluetooth_runtime_t pairing_runtime = {0};
     bluetooth_init(&pairing_runtime, &state);
+    assert(bluetooth_restore_pairing(&pairing_runtime, TEST_PAIRING_PEER_ID));
+    bluetooth_poll(&pairing_runtime);
     assert(!bluetooth_handle_pairing_button(NULL, TEST_PAIRING_PEER_ID, true));
     bluetooth_runtime_t uninitialized_runtime = {0};
     assert(!bluetooth_handle_pairing_button(&uninitialized_runtime, TEST_PAIRING_PEER_ID, true));

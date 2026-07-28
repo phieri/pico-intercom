@@ -26,9 +26,15 @@ typedef struct {
 
 void bluetooth_classic_stack_init(bluetooth_classic_stack_t *stack);
 bool bluetooth_classic_stack_set_enabled(bluetooth_classic_stack_t *stack, bool enabled);
+void bluetooth_classic_stack_set_local_peer_id(bluetooth_classic_stack_t *stack, uint8_t peer_id);
+uint8_t bluetooth_classic_stack_local_peer_id(const bluetooth_classic_stack_t *stack);
 bool bluetooth_classic_stack_pair(bluetooth_classic_stack_t *stack, uint8_t peer_id);
 bool bluetooth_classic_stack_connect(bluetooth_classic_stack_t *stack, uint8_t peer_id);
 bool bluetooth_classic_stack_disconnect(bluetooth_classic_stack_t *stack, uint8_t peer_id);
+bool bluetooth_classic_stack_restore_pairing(bluetooth_classic_stack_t *stack, uint8_t peer_id);
+bool bluetooth_classic_stack_poll(bluetooth_classic_stack_t *stack);
+bool bluetooth_classic_stack_select_pairing_candidate(const bluetooth_classic_stack_t *stack,
+                                                      uint8_t *peer_id);
 bool bluetooth_classic_stack_queue_packet(bluetooth_classic_stack_t *stack, uint8_t source_peer,
                                           uint8_t target_peer, const uint8_t *payload,
                                           size_t payload_len);

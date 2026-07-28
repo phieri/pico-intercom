@@ -75,6 +75,7 @@ typedef struct {
     uint32_t last_error_code;
     bluetooth_command_id_t last_command;
     uint8_t last_peer_id;
+    uint8_t local_peer_id;
     size_t transport_packets_queued;
     size_t transport_packets_delivered;
     size_t transport_packets_dropped;
@@ -106,6 +107,8 @@ bool bluetooth_handle_command(bluetooth_runtime_t *runtime, const char *command,
                               uint8_t peer_id);
 bool bluetooth_handle_pairing_button(bluetooth_runtime_t *runtime, uint8_t peer_id,
                                     bool button_pressed);
+bool bluetooth_restore_pairing(bluetooth_runtime_t *runtime, uint8_t peer_id);
+void bluetooth_poll(bluetooth_runtime_t *runtime);
 bool bluetooth_process_local_audio(bluetooth_runtime_t *runtime, uint8_t source_peer);
 void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
                            const uint8_t *payload, size_t payload_len);

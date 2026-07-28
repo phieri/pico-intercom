@@ -3,6 +3,7 @@
 #if defined(PICO_INTERCOM_TARGET)
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
+#include "pico/unique_id.h"
 #endif
 
 #include <stdio.h>
@@ -68,8 +69,9 @@ static bool bluetooth_runtime_is_ready(const bluetooth_runtime_t *runtime) {
 }
 
 bool bluetooth_runtime_is_operational(const bluetooth_runtime_t *runtime) {
-    return runtime != NULL && runtime->initialized && runtime->enabled && runtime->platform_initialized &&
-           !runtime->platform_error;
+    return runtime != NULL && runtime->initialized && runtime->enabled &&
+           runtime->platform_initialized && !runtime->platform_error &&
+           runtime->classic_stack.transport.backend_ready;
 }
 
 static bool bluetooth_has_pending_target(const bluetooth_runtime_t *runtime, uint8_t target_peer) {
@@ -153,12 +155,55 @@ static void bluetooth_flush_classic_packets(bluetooth_runtime_t *runtime) {
         return;
     }
 
+#if !defined(PICO_INTERCOM_TARGET)
     bluetooth_classic_packet_t packet;
     while (bluetooth_classic_stack_dequeue_packet(&runtime->classic_stack, &packet)) {
         runtime->transport_packets_delivered++;
         runtime->last_transport_source_peer = packet.source_peer;
         runtime->last_transport_target_peer = packet.target_peer;
     }
+#endif
+}
+
+static void bluetooth_sync_transport_counters(bluetooth_runtime_t *runtime) {
+    if (runtime == NULL) {
+        return;
+    }
+
+    runtime->transport_packets_queued = runtime->classic_stack.transport.packets_queued;
+    runtime->transport_packets_delivered = runtime->classic_stack.transport.packets_delivered;
+    runtime->transport_packets_dropped = runtime->classic_stack.transport.packets_dropped;
+    runtime->last_transport_source_peer = runtime->classic_stack.transport.last_source_peer;
+    runtime->last_transport_target_peer = runtime->classic_stack.transport.last_target_peer;
+}
+
+static void bluetooth_sync_connected_peers(bluetooth_runtime_t *runtime) {
+    if (runtime == NULL) {
+        return;
+    }
+
+    runtime->connected_peer_count = runtime->classic_stack.transport.connected_peer_count;
+    for (size_t index = 0; index < runtime->connected_peer_count; ++index) {
+        runtime->connected_peers[index] = runtime->classic_stack.transport.connected_peers[index];
+        runtime->peer_states[index] = BLUETOOTH_PEER_STATE_CONNECTED;
+    }
+    for (size_t index = runtime->connected_peer_count; index < INTERCOM_MAX_PEERS; ++index) {
+        runtime->peer_states[index] = BLUETOOTH_PEER_STATE_DISCONNECTED;
+    }
+}
+
+static uint8_t bluetooth_target_local_peer_id(void) {
+#if defined(PICO_INTERCOM_TARGET)
+    pico_unique_board_id_t board_id;
+    pico_get_unique_board_id(&board_id);
+    uint8_t folded = 0U;
+    for (size_t index = 0; index < sizeof(board_id.id); ++index) {
+        folded ^= board_id.id[index];
+    }
+    return (uint8_t)((folded % 250U) + 1U);
+#else
+    return 1U;
+#endif
 }
 
 static void bluetooth_relay(void *context, uint8_t source_peer, uint8_t target_peer,
@@ -245,6 +290,7 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
     runtime->enabled = true;
     runtime->advertising = true;
     runtime->scanning = true;
+    runtime->local_peer_id = bluetooth_target_local_peer_id();
 #if defined(PICO_INTERCOM_TARGET)
     runtime->platform_initialized = false;
 #else
@@ -254,8 +300,15 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
     runtime->initialized = true;
     intercom_audio_init(&runtime->audio);
     bluetooth_classic_stack_init(&runtime->classic_stack);
+    bluetooth_classic_stack_set_local_peer_id(&runtime->classic_stack, runtime->local_peer_id);
     bluetooth_reset_peer_states(runtime);
-    (void)bluetooth_platform_set_enabled(runtime, runtime->enabled);
+    if (!bluetooth_platform_set_enabled(runtime, runtime->enabled) ||
+        !bluetooth_classic_stack_set_enabled(&runtime->classic_stack, runtime->enabled)) {
+        runtime->platform_error = true;
+        runtime->enabled = false;
+    }
+    bluetooth_sync_transport_counters(runtime);
+    bluetooth_sync_connected_peers(runtime);
 }
 
 bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
@@ -272,12 +325,19 @@ bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
 
     runtime->enabled = enabled;
     intercom_audio_set_enabled(&runtime->audio, enabled);
-    bluetooth_classic_stack_set_enabled(&runtime->classic_stack, enabled);
+    if (!bluetooth_classic_stack_set_enabled(&runtime->classic_stack, enabled)) {
+        runtime->platform_error = true;
+        runtime->enabled = false;
+        bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_NOT_READY);
+        return false;
+    }
     if (!enabled) {
         bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_DISABLED);
     } else {
         runtime->last_error_code = BLUETOOTH_ERROR_NONE;
     }
+    bluetooth_sync_transport_counters(runtime);
+    bluetooth_sync_connected_peers(runtime);
     return true;
 }
 
@@ -305,12 +365,19 @@ bool bluetooth_toggle(bluetooth_runtime_t *runtime) {
 
     runtime->enabled = requested_enabled;
     intercom_audio_set_enabled(&runtime->audio, runtime->enabled);
-    bluetooth_classic_stack_set_enabled(&runtime->classic_stack, runtime->enabled);
+    if (!bluetooth_classic_stack_set_enabled(&runtime->classic_stack, runtime->enabled)) {
+        runtime->platform_error = true;
+        runtime->enabled = false;
+        bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_NOT_READY);
+        return false;
+    }
     if (!runtime->enabled) {
         bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_DISABLED);
     } else {
         runtime->last_error_code = BLUETOOTH_ERROR_NONE;
     }
+    bluetooth_sync_transport_counters(runtime);
+    bluetooth_sync_connected_peers(runtime);
     return runtime->enabled;
 }
 
@@ -351,6 +418,13 @@ bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
         return false;
     }
 
+#if defined(PICO_INTERCOM_TARGET)
+    runtime->connection_attempts++;
+    runtime->last_error_code = BLUETOOTH_ERROR_NONE;
+    bluetooth_sync_connected_peers(runtime);
+    bluetooth_sync_transport_counters(runtime);
+    return true;
+#else
     if (runtime->intercom != NULL && !intercom_add_peer(runtime->intercom, peer_id)) {
         if (!bluetooth_classic_stack_disconnect(&runtime->classic_stack, peer_id)) {
             runtime->failed_disconnections++;
@@ -367,7 +441,10 @@ bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
     runtime->successful_connections++;
     runtime->last_error_code = BLUETOOTH_ERROR_NONE;
     runtime->peer_states[peer_index] = BLUETOOTH_PEER_STATE_CONNECTED;
+    bluetooth_sync_transport_counters(runtime);
+    bluetooth_sync_connected_peers(runtime);
     return true;
+#endif
 }
 
 bool bluetooth_disconnect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
@@ -402,6 +479,8 @@ bool bluetooth_disconnect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
         intercom_remove_peer(runtime->intercom, peer_id);
     }
 
+    bluetooth_sync_transport_counters(runtime);
+    bluetooth_sync_connected_peers(runtime);
     return true;
 }
 
@@ -558,17 +637,63 @@ bool bluetooth_handle_pairing_button(bluetooth_runtime_t *runtime, uint8_t peer_
         return false;
     }
 
-    const bool connected = bluetooth_execute_command(runtime, BLUETOOTH_COMMAND_PAIR, peer_id);
+    uint8_t selected_peer_id = peer_id;
+    if (!bluetooth_classic_stack_select_pairing_candidate(&runtime->classic_stack,
+                                                          &selected_peer_id)) {
+        selected_peer_id = peer_id;
+    }
+
+    const bool connected =
+        bluetooth_execute_command(runtime, BLUETOOTH_COMMAND_PAIR, selected_peer_id);
     if (!connected) {
         runtime->pairing_in_progress = false;
         runtime->pairing_error = true;
-        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_PEER_LIMIT);
+        bluetooth_record_error(runtime, selected_peer_id, BLUETOOTH_ERROR_PEER_LIMIT);
         return false;
     }
 
     runtime->pairing_in_progress = false;
     runtime->pairing_error = false;
+    runtime->pairing_peer_id = selected_peer_id;
+    bluetooth_sync_transport_counters(runtime);
+    bluetooth_sync_connected_peers(runtime);
     return true;
+}
+
+bool bluetooth_restore_pairing(bluetooth_runtime_t *runtime, uint8_t peer_id) {
+    if (!bluetooth_runtime_is_ready(runtime) || peer_id == 0U) {
+        return false;
+    }
+
+    if (!bluetooth_classic_stack_restore_pairing(&runtime->classic_stack, peer_id)) {
+        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_STORAGE);
+        return false;
+    }
+
+    bluetooth_sync_transport_counters(runtime);
+    return true;
+}
+
+void bluetooth_poll(bluetooth_runtime_t *runtime) {
+    if (!bluetooth_runtime_is_ready(runtime) || !runtime->enabled) {
+        return;
+    }
+
+    (void)bluetooth_classic_stack_poll(&runtime->classic_stack);
+    bluetooth_sync_transport_counters(runtime);
+    bluetooth_sync_connected_peers(runtime);
+
+#if defined(PICO_INTERCOM_TARGET)
+    bluetooth_classic_packet_t packet = {0};
+    while (bluetooth_classic_stack_dequeue_packet(&runtime->classic_stack, &packet)) {
+        if (runtime->intercom != NULL) {
+            (void)intercom_add_peer(runtime->intercom, packet.source_peer);
+        }
+        bluetooth_handle_audio(runtime, packet.source_peer, packet.payload, packet.payload_len);
+        bluetooth_sync_transport_counters(runtime);
+        bluetooth_sync_connected_peers(runtime);
+    }
+#endif
 }
 
 bool bluetooth_process_local_audio(bluetooth_runtime_t *runtime, uint8_t source_peer) {
@@ -640,4 +765,6 @@ void bluetooth_handle_audio(bluetooth_runtime_t *runtime, uint8_t source_peer,
     }
     runtime->relay_target_count = runtime->pending_relay_target_count;
     bluetooth_flush_classic_packets(runtime);
+    bluetooth_sync_transport_counters(runtime);
+    bluetooth_sync_connected_peers(runtime);
 }
