@@ -260,7 +260,6 @@ bool bluetooth_transport_queue_packet(bluetooth_transport_t *transport, uint8_t 
     }
 
     bluetooth_transport_packet_t *packet = &transport->queue[transport->queued_packet_count];
-    memset(packet, 0, sizeof(*packet));
     packet->source_peer = source_peer;
     packet->target_peer = target_peer;
     packet->payload_len = payload_len;

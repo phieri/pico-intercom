@@ -58,10 +58,9 @@ ctest --test-dir build --output-on-failure
 The Pico SDK checkout must include its BTstack submodule support. Verify that
 `$PICO_SDK_PATH/lib/btstack` exists before configuring the firmware build. If
 it is missing, populate the SDK recursively or initialize the BTstack submodule
-inside the SDK checkout first.
+inside the SDK checkout first before continuing.
 
 ```sh
-test -d "$PWD/pico-sdk/lib/btstack"
 cmake -S . -B build-firmware -DPICO_BOARD=pico2_w -DPICO_SDK_PATH=$PWD/pico-sdk
 cmake --build build-firmware
 ```

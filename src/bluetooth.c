@@ -205,7 +205,8 @@ static uint8_t bluetooth_derive_local_peer_id(void) {
         crc ^= board_id.id[index];
         for (uint8_t bit = 0U; bit < 8U; ++bit) {
             /* CRC-8 with polynomial 0x07 gives a better spread than a raw XOR fold
-             * before we compress the result into the firmware's 1-250 peer-ID range. */
+             * before we compress the result into the firmware's 1-250 peer-ID range.
+             * The final modulo and +1 keep the ID non-zero even if the CRC is zero. */
             crc = (crc & 0x80U) != 0U ? (uint8_t)((crc << 1U) ^ 0x07U) : (uint8_t)(crc << 1U);
         }
     }
