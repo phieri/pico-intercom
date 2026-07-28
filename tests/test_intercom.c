@@ -137,6 +137,8 @@ int main(void) {
     assert(!bluetooth_is_enabled(&runtime));
     assert(bluetooth_toggle(&runtime));
     assert(bluetooth_is_enabled(&runtime));
+    assert(!bluetooth_toggle(&runtime));
+    assert(!bluetooth_is_enabled(&runtime));
 
     bluetooth_runtime_t pairing_runtime = {0};
     bluetooth_init(&pairing_runtime, &state);
