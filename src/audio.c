@@ -1,9 +1,6 @@
 #include "audio.h"
 
 #if defined(PICO_INTERCOM_TARGET)
-#include "hardware/adc.h"
-#include "hardware/pwm.h"
-#include "pico/stdlib.h"
 #include <stdio.h>
 #endif
 
@@ -49,59 +46,6 @@ static void audio_generate_samples(intercom_audio_subsystem_t *audio, intercom_a
     }
 }
 
-#if defined(PICO_INTERCOM_TARGET)
-static bool audio_target_initialized = false;
-static const uint audio_target_adc_gpio = 26U;
-static const uint audio_target_pwm_gpio = 16U;
-
-static bool audio_target_init_hardware(void) {
-    if (audio_target_initialized) {
-        return true;
-    }
-
-    adc_init();
-    adc_gpio_init(audio_target_adc_gpio);
-    adc_select_input(0U);
-
-    gpio_set_function(audio_target_pwm_gpio, GPIO_FUNC_PWM);
-    const uint pwm_slice = pwm_gpio_to_slice_num(audio_target_pwm_gpio);
-    pwm_config config = pwm_get_default_config();
-    pwm_config_set_wrap(&config, 255U);
-    pwm_init(pwm_slice, &config, true);
-    pwm_set_chan_level(pwm_slice, pwm_gpio_to_channel(audio_target_pwm_gpio), 0U);
-
-    audio_target_initialized = true;
-    return true;
-}
-
-static void audio_target_capture(void *context, int16_t *samples, size_t sample_count) {
-    (void)context;
-    if (!audio_target_init_hardware()) {
-        memset(samples, 0, sample_count * sizeof(samples[0]));
-        return;
-    }
-
-    for (size_t index = 0; index < sample_count; ++index) {
-        const uint16_t raw = adc_read();
-        const int32_t centered = (int32_t)raw - 2048;
-        samples[index] = (int16_t)(centered * 4);
-    }
-}
-
-static void audio_target_playback(void *context, const int16_t *samples, size_t sample_count) {
-    (void)context;
-    if (!audio_target_init_hardware()) {
-        return;
-    }
-
-    for (size_t index = 0; index < sample_count; ++index) {
-        const int32_t sample_value = (int32_t)samples[index];
-        const int32_t scaled = (sample_value + 32768) / 256;
-        const uint16_t duty = scaled < 0 ? 0U : (scaled > 255 ? 255U : (uint16_t)scaled);
-        pwm_set_gpio_level(audio_target_pwm_gpio, duty);
-    }
-}
-#endif
 
 void intercom_audio_init(intercom_audio_subsystem_t *audio) {
     if (audio == NULL) {
@@ -119,12 +63,8 @@ void intercom_audio_init(intercom_audio_subsystem_t *audio) {
     audio->next_sequence = 1U;
 
 #if defined(PICO_INTERCOM_TARGET)
-    if (!audio_target_init_hardware()) {
-        fprintf(stderr, "Audio backend init failed; capture/playback will use zeroed samples.\n");
-        return;
-    }
-    intercom_audio_set_capture_callback(audio, audio_target_capture, NULL);
-    intercom_audio_set_playback_callback(audio, audio_target_playback, NULL);
+    (void)fprintf(stderr,
+                  "Audio backend uses software-generated PCM frames; no direct ADC/PWM audio hardware is required.\n");
 #endif
 }
 

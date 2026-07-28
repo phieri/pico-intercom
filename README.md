@@ -1,6 +1,6 @@
 # pico-intercom
 
-pico-intercom is a Raspberry Pi Pico 2 W firmware project for a local Bluetooth audio intercom. The repository now contains a real target-side runtime for the Pico 2 W that initializes the CYW43 wireless core and a hardware-backed audio backend rather than relying on synthetic placeholders.
+pico-intercom is a Raspberry Pi Pico 2 W firmware project for a local Bluetooth audio intercom. The repository now contains a real target-side runtime for the Pico 2 W that initializes the CYW43 wireless core and a software-backed audio backend rather than relying on synthetic placeholders.
 
 ## What changed
 
@@ -8,7 +8,7 @@ The firmware now provides:
 
 - A modular intercom routing core that relays audio packets to connected peers while PTT is active.
 - A target-side Bluetooth runtime that initializes the Pico W radio stack through the Raspberry Pi Pico SDK and brings up the CYW43 wireless backend for runtime status and future transport work.
-- A hardware-backed audio path that uses the Pico SDK ADC/PWM peripherals for capture/playback on the Pico target.
+- A software-backed audio path for intercom frame generation and playback on the Pico target, without requiring direct ADC/PWM audio hardware.
 - Flash-backed pairing persistence for Pico targets with verified writes instead of best-effort storage.
 - Host-side tests that exercise the routing core, Bluetooth runtime, pairing persistence, and transport logic without requiring hardware.
 
@@ -18,11 +18,9 @@ The firmware now provides:
 - USB cable for flashing and serial console
 - Onboard button (GPIO 14 by default) to trigger pairing
 - Onboard LED (GPIO 25 by default) to indicate runtime state
-- Optional analog audio hardware:
-  - ADC input on GPIO 26 (ADC0) for a microphone or analog signal source
-  - PWM output on GPIO 16 for a small speaker or earphone driver
+- No direct microphone or speaker hardware is required; audio is relayed over Bluetooth and the runtime uses software-generated PCM frames for local testing and transport flow.
 
-The audio backend uses a simple, practical path that works with an analog microphone or other ADC source and a PWM-driven output stage. The build does not require a codec or I2S peripheral.
+The audio backend uses a simple software-generated PCM path for intercom frame handling and transport. The build does not require a codec, I2S peripheral, or direct microphone/speaker hardware.
 
 ## Firmware behavior
 
@@ -36,7 +34,7 @@ On boot, the firmware:
 
 When a pairing is initiated, the runtime records the target peer in the runtime state, marks the radio backend as active, and persists the pairing metadata to flash.
 
-Audio packets are queued through the existing transport layer and relayed to peers while the intercom is enabled and PTT is active. On the Pico target the audio subsystem uses hardware capture/playback callbacks rather than a purely synthetic frame generator.
+Audio packets are queued through the existing transport layer and relayed to peers while the intercom is enabled and PTT is active. On the Pico target the audio subsystem uses software-generated PCM frames rather than direct microphone or speaker hardware.
 
 ## Build and test
 
@@ -67,6 +65,6 @@ The build produces a `.uf2` image suitable for flashing to the Pico 2 W.
 
 ## Known limitations
 
-- The current firmware uses a practical Pico SDK CYW43 runtime initialization path and a hardware ADC/PWM audio backend. It is intended as a buildable, flashable runtime and demonstration firmware rather than a full-featured Bluetooth Classic or advanced codec implementation.
-- Actual peer-to-peer interoperability depends on a second Pico or a compatible device with a matching transport layer; the current build is focused on bringing up the radio and audio hardware cleanly.
-- The audio path uses a simple ADC/PWM bridge and is intended for development and demonstration purposes; for production quality audio you would typically use a dedicated microphone codec and DAC/I2S path.
+- The current firmware uses a practical Pico SDK CYW43 runtime initialization path and a software-generated audio backend. It is intended as a buildable, flashable runtime and demonstration firmware rather than a full-featured Bluetooth Classic or advanced codec implementation.
+- Actual peer-to-peer interoperability depends on a second Pico or a compatible device with a matching transport layer; the current build is focused on bringing up the radio stack and transport flow cleanly.
+- The audio path uses software-generated PCM frames and is intended for development and demonstration purposes; for production quality audio you would typically use a dedicated microphone codec and DAC/I2S path.
