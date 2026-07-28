@@ -196,7 +196,7 @@ static void bluetooth_sync_connected_peers(bluetooth_runtime_t *runtime) {
 #endif
 }
 
-static uint8_t bluetooth_target_local_peer_id(void) {
+static uint8_t bluetooth_derive_local_peer_id(void) {
 #if defined(PICO_INTERCOM_TARGET)
     pico_unique_board_id_t board_id;
     pico_get_unique_board_id(&board_id);
@@ -294,7 +294,7 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
     runtime->enabled = true;
     runtime->advertising = true;
     runtime->scanning = true;
-    runtime->local_peer_id = bluetooth_target_local_peer_id();
+    runtime->local_peer_id = bluetooth_derive_local_peer_id();
 #if defined(PICO_INTERCOM_TARGET)
     runtime->platform_initialized = false;
 #else

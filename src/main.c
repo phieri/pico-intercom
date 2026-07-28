@@ -164,6 +164,7 @@ int main(void) {
                                                    ? bluetooth.pairing_peer_id
                                                    : PICO_INTERCOM_PAIR_BUTTON_PEER_ID;
                 pairing_t button_pairing = make_pairing(paired_peer_id);
+                printf("Persisting Bluetooth pairing for peer %u.\n", (unsigned)paired_peer_id);
                 if (pairing_store_save(&pairing_store, &button_pairing)) {
                     printf("Bluetooth pairing complete for peer %u.\n", (unsigned)paired_peer_id);
                 } else {

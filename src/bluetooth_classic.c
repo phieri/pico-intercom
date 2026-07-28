@@ -59,9 +59,9 @@ typedef struct {
     bluetooth_classic_stack_t *stack;
     bluetooth_transport_packet_t server_outbox[INTERCOM_MAX_SERVER_OUTBOX];
     size_t server_outbox_count;
-} bluetooth_target_backend_t;
+} bluetooth_ble_backend_t;
 
-static bluetooth_target_backend_t bluetooth_target_backend = {0};
+static bluetooth_ble_backend_t bluetooth_ble_backend = {0};
 extern const uint8_t profile_data[];
 
 static bool transport_has_remembered_peer(const bluetooth_transport_t *transport, uint8_t peer_id) {
@@ -283,7 +283,7 @@ static void update_advertising_data(bluetooth_classic_stack_t *stack) {
 static void start_scanning(void) {
     gap_set_scan_parameters(0, 0x0030, 0x0030);
     gap_start_scan();
-    bluetooth_target_backend.state = TARGET_STATE_SCANNING;
+    bluetooth_ble_backend.state = TARGET_STATE_SCANNING;
 }
 
 static bluetooth_transport_peer_info_t *find_discovered_by_address(bluetooth_transport_t *transport,
@@ -307,8 +307,8 @@ static bluetooth_transport_peer_info_t *find_discovered_by_address(bluetooth_tra
 }
 
 static void connect_to_peer(bluetooth_classic_stack_t *stack, uint8_t peer_id) {
-    if (stack == NULL || bluetooth_target_backend.state == TARGET_STATE_CONNECTING ||
-        bluetooth_target_backend.con_handle != HCI_CON_HANDLE_INVALID) {
+    if (stack == NULL || bluetooth_ble_backend.state == TARGET_STATE_CONNECTING ||
+        bluetooth_ble_backend.con_handle != HCI_CON_HANDLE_INVALID) {
         return;
     }
 
@@ -318,52 +318,52 @@ static void connect_to_peer(bluetooth_classic_stack_t *stack, uint8_t peer_id) {
         return;
     }
 
-    memcpy(bluetooth_target_backend.selected_address, peer->address,
-           sizeof(bluetooth_target_backend.selected_address));
-    bluetooth_target_backend.selected_address_type = (bd_addr_type_t)peer->address_type;
-    bluetooth_target_backend.selected_peer_id = peer_id;
+    memcpy(bluetooth_ble_backend.selected_address, peer->address,
+           sizeof(bluetooth_ble_backend.selected_address));
+    bluetooth_ble_backend.selected_address_type = (bd_addr_type_t)peer->address_type;
+    bluetooth_ble_backend.selected_peer_id = peer_id;
     peer->pairing_pending = true;
     stack->transport.pending_pair_peer_id = peer_id;
     gap_stop_scan();
-    bluetooth_target_backend.state = TARGET_STATE_CONNECTING;
-    gap_connect(bluetooth_target_backend.selected_address,
-                bluetooth_target_backend.selected_address_type);
+    bluetooth_ble_backend.state = TARGET_STATE_CONNECTING;
+    gap_connect(bluetooth_ble_backend.selected_address,
+                bluetooth_ble_backend.selected_address_type);
 }
 
 static void server_request_can_send(void) {
-    if (bluetooth_target_backend.con_handle == HCI_CON_HANDLE_INVALID ||
-        bluetooth_target_backend.server_outbox_count == 0U ||
-        bluetooth_target_backend.role != TARGET_ROLE_PERIPHERAL ||
-        !bluetooth_target_backend.notifications_enabled ||
-        bluetooth_target_backend.notification_pending) {
+    if (bluetooth_ble_backend.con_handle == HCI_CON_HANDLE_INVALID ||
+        bluetooth_ble_backend.server_outbox_count == 0U ||
+        bluetooth_ble_backend.role != TARGET_ROLE_PERIPHERAL ||
+        !bluetooth_ble_backend.notifications_enabled ||
+        bluetooth_ble_backend.notification_pending) {
         return;
     }
 
-    bluetooth_target_backend.notification_pending = true;
-    att_server_request_can_send_now_event(bluetooth_target_backend.con_handle);
+    bluetooth_ble_backend.notification_pending = true;
+    att_server_request_can_send_now_event(bluetooth_ble_backend.con_handle);
 }
 
 static bool enqueue_server_notification(const bluetooth_transport_packet_t *packet) {
     if (packet == NULL ||
-        bluetooth_target_backend.server_outbox_count >= INTERCOM_MAX_SERVER_OUTBOX) {
+        bluetooth_ble_backend.server_outbox_count >= INTERCOM_MAX_SERVER_OUTBOX) {
         return false;
     }
 
-    bluetooth_target_backend.server_outbox[bluetooth_target_backend.server_outbox_count++] = *packet;
+    bluetooth_ble_backend.server_outbox[bluetooth_ble_backend.server_outbox_count++] = *packet;
     server_request_can_send();
     return true;
 }
 
 static void dequeue_server_notification(void) {
-    if (bluetooth_target_backend.server_outbox_count == 0U) {
+    if (bluetooth_ble_backend.server_outbox_count == 0U) {
         return;
     }
 
-    for (size_t index = 1U; index < bluetooth_target_backend.server_outbox_count; ++index) {
-        bluetooth_target_backend.server_outbox[index - 1U] =
-            bluetooth_target_backend.server_outbox[index];
+    for (size_t index = 1U; index < bluetooth_ble_backend.server_outbox_count; ++index) {
+        bluetooth_ble_backend.server_outbox[index - 1U] =
+            bluetooth_ble_backend.server_outbox[index];
     }
-    bluetooth_target_backend.server_outbox_count--;
+    bluetooth_ble_backend.server_outbox_count--;
 }
 
 static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint8_t *packet,
@@ -372,26 +372,26 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
     UNUSED(channel);
     UNUSED(size);
 
-    bluetooth_classic_stack_t *stack = bluetooth_target_backend.stack;
+    bluetooth_classic_stack_t *stack = bluetooth_ble_backend.stack;
     if (stack == NULL) {
         return;
     }
 
-    switch (bluetooth_target_backend.state) {
+    switch (bluetooth_ble_backend.state) {
     case TARGET_STATE_DISCOVER_SERVICE:
         switch (hci_event_packet_get_type(packet)) {
         case GATT_EVENT_SERVICE_QUERY_RESULT:
-            gatt_event_service_query_result_get_service(packet, &bluetooth_target_backend.service);
+            gatt_event_service_query_result_get_service(packet, &bluetooth_ble_backend.service);
             break;
         case GATT_EVENT_QUERY_COMPLETE:
             if (gatt_event_query_complete_get_att_status(packet) != ATT_ERROR_SUCCESS) {
-                gap_disconnect(bluetooth_target_backend.con_handle);
+                gap_disconnect(bluetooth_ble_backend.con_handle);
                 break;
             }
-            bluetooth_target_backend.state = TARGET_STATE_DISCOVER_TX_CHARACTERISTIC;
+            bluetooth_ble_backend.state = TARGET_STATE_DISCOVER_TX_CHARACTERISTIC;
             gatt_client_discover_characteristics_for_service_by_uuid16(
-                handle_gatt_client_event, bluetooth_target_backend.con_handle,
-                &bluetooth_target_backend.service, INTERCOM_TX_UUID16);
+                handle_gatt_client_event, bluetooth_ble_backend.con_handle,
+                &bluetooth_ble_backend.service, INTERCOM_TX_UUID16);
             break;
         default:
             break;
@@ -401,17 +401,17 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
         switch (hci_event_packet_get_type(packet)) {
         case GATT_EVENT_CHARACTERISTIC_QUERY_RESULT:
             gatt_event_characteristic_query_result_get_characteristic(
-                packet, &bluetooth_target_backend.tx_characteristic);
+                packet, &bluetooth_ble_backend.tx_characteristic);
             break;
         case GATT_EVENT_QUERY_COMPLETE:
             if (gatt_event_query_complete_get_att_status(packet) != ATT_ERROR_SUCCESS) {
-                gap_disconnect(bluetooth_target_backend.con_handle);
+                gap_disconnect(bluetooth_ble_backend.con_handle);
                 break;
             }
-            bluetooth_target_backend.state = TARGET_STATE_DISCOVER_RX_CHARACTERISTIC;
+            bluetooth_ble_backend.state = TARGET_STATE_DISCOVER_RX_CHARACTERISTIC;
             gatt_client_discover_characteristics_for_service_by_uuid16(
-                handle_gatt_client_event, bluetooth_target_backend.con_handle,
-                &bluetooth_target_backend.service, INTERCOM_RX_UUID16);
+                handle_gatt_client_event, bluetooth_ble_backend.con_handle,
+                &bluetooth_ble_backend.service, INTERCOM_RX_UUID16);
             break;
         default:
             break;
@@ -421,21 +421,21 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
         switch (hci_event_packet_get_type(packet)) {
         case GATT_EVENT_CHARACTERISTIC_QUERY_RESULT:
             gatt_event_characteristic_query_result_get_characteristic(
-                packet, &bluetooth_target_backend.rx_characteristic);
+                packet, &bluetooth_ble_backend.rx_characteristic);
             break;
         case GATT_EVENT_QUERY_COMPLETE:
             if (gatt_event_query_complete_get_att_status(packet) != ATT_ERROR_SUCCESS) {
-                gap_disconnect(bluetooth_target_backend.con_handle);
+                gap_disconnect(bluetooth_ble_backend.con_handle);
                 break;
             }
-            bluetooth_target_backend.listener_registered = true;
+            bluetooth_ble_backend.listener_registered = true;
             gatt_client_listen_for_characteristic_value_updates(
-                &bluetooth_target_backend.notification_listener, handle_gatt_client_event,
-                bluetooth_target_backend.con_handle, &bluetooth_target_backend.tx_characteristic);
-            bluetooth_target_backend.state = TARGET_STATE_ENABLE_NOTIFICATIONS;
+                &bluetooth_ble_backend.notification_listener, handle_gatt_client_event,
+                bluetooth_ble_backend.con_handle, &bluetooth_ble_backend.tx_characteristic);
+            bluetooth_ble_backend.state = TARGET_STATE_ENABLE_NOTIFICATIONS;
             gatt_client_write_client_characteristic_configuration(
-                handle_gatt_client_event, bluetooth_target_backend.con_handle,
-                &bluetooth_target_backend.tx_characteristic,
+                handle_gatt_client_event, bluetooth_ble_backend.con_handle,
+                &bluetooth_ble_backend.tx_characteristic,
                 GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_NOTIFICATION);
             break;
         default:
@@ -445,11 +445,11 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
     case TARGET_STATE_ENABLE_NOTIFICATIONS:
         if (hci_event_packet_get_type(packet) == GATT_EVENT_QUERY_COMPLETE &&
             gatt_event_query_complete_get_att_status(packet) == ATT_ERROR_SUCCESS) {
-            bluetooth_target_backend.state = TARGET_STATE_READY;
+            bluetooth_ble_backend.state = TARGET_STATE_READY;
             stack->connected = true;
             stack->transport.backend_ready = true;
             printf("Bluetooth LE link ready for peer %u.\n",
-                   (unsigned)bluetooth_target_backend.selected_peer_id);
+                   (unsigned)bluetooth_ble_backend.selected_peer_id);
         }
         break;
     case TARGET_STATE_READY:
@@ -458,7 +458,7 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
             const uint16_t value_length = gatt_event_notification_get_value_length(packet);
             if (value != NULL && value_length > 0U) {
                 (void)bluetooth_transport_queue_packet(
-                    &stack->transport, bluetooth_target_backend.selected_peer_id,
+                    &stack->transport, bluetooth_ble_backend.selected_peer_id,
                     stack->transport.local_peer_id, value, value_length);
             }
         }
@@ -477,19 +477,19 @@ static void att_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
         return;
     }
 
-    bluetooth_classic_stack_t *stack = bluetooth_target_backend.stack;
+    bluetooth_classic_stack_t *stack = bluetooth_ble_backend.stack;
     if (stack == NULL) {
         return;
     }
 
     if (hci_event_packet_get_type(packet) == ATT_EVENT_CAN_SEND_NOW) {
-        bluetooth_target_backend.notification_pending = false;
-        if (bluetooth_target_backend.server_outbox_count == 0U) {
+        bluetooth_ble_backend.notification_pending = false;
+        if (bluetooth_ble_backend.server_outbox_count == 0U) {
             return;
         }
 
-        const bluetooth_transport_packet_t *next = &bluetooth_target_backend.server_outbox[0];
-        att_server_notify(bluetooth_target_backend.con_handle,
+        const bluetooth_transport_packet_t *next = &bluetooth_ble_backend.server_outbox[0];
+        att_server_notify(bluetooth_ble_backend.con_handle,
                           ATT_CHARACTERISTIC_FFF1_01_VALUE_HANDLE, next->payload,
                           (uint16_t)next->payload_len);
         stack->transport.packets_delivered++;
@@ -514,26 +514,26 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
     UNUSED(transaction_mode);
     UNUSED(offset);
 
-    bluetooth_classic_stack_t *stack = bluetooth_target_backend.stack;
+    bluetooth_classic_stack_t *stack = bluetooth_ble_backend.stack;
     if (stack == NULL || buffer == NULL || buffer_size == 0U) {
         return 0;
     }
 
     if (att_handle == ATT_CHARACTERISTIC_FFF1_01_CLIENT_CONFIGURATION_HANDLE) {
-        bluetooth_target_backend.notifications_enabled =
+        bluetooth_ble_backend.notifications_enabled =
             little_endian_read_16(buffer, 0) ==
             GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_NOTIFICATION;
-        bluetooth_target_backend.con_handle = connection_handle;
-        bluetooth_target_backend.role = TARGET_ROLE_PERIPHERAL;
-        bluetooth_target_backend.state = TARGET_STATE_READY;
+        bluetooth_ble_backend.con_handle = connection_handle;
+        bluetooth_ble_backend.role = TARGET_ROLE_PERIPHERAL;
+        bluetooth_ble_backend.state = TARGET_STATE_READY;
         server_request_can_send();
         return 0;
     }
 
     if (att_handle == ATT_CHARACTERISTIC_FFF2_01_VALUE_HANDLE &&
-        bluetooth_target_backend.selected_peer_id != 0U) {
+        bluetooth_ble_backend.selected_peer_id != 0U) {
         (void)bluetooth_transport_queue_packet(&stack->transport,
-                                               bluetooth_target_backend.selected_peer_id,
+                                               bluetooth_ble_backend.selected_peer_id,
                                                stack->transport.local_peer_id, buffer,
                                                buffer_size);
     }
@@ -550,7 +550,7 @@ static void hci_event_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
         return;
     }
 
-    bluetooth_classic_stack_t *stack = bluetooth_target_backend.stack;
+    bluetooth_classic_stack_t *stack = bluetooth_ble_backend.stack;
     if (stack == NULL) {
         return;
     }
@@ -566,7 +566,7 @@ static void hci_event_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
                    (unsigned)stack->transport.local_peer_id);
         } else {
             stack->transport.backend_ready = false;
-            bluetooth_target_backend.state = TARGET_STATE_OFF;
+            bluetooth_ble_backend.state = TARGET_STATE_OFF;
         }
         break;
     case GAP_EVENT_ADVERTISING_REPORT:
@@ -594,8 +594,8 @@ static void hci_event_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
 
             if ((stack->transport.pending_pair_peer_id == peer_id ||
                  transport_has_remembered_peer(&stack->transport, peer_id)) &&
-                bluetooth_target_backend.con_handle == HCI_CON_HANDLE_INVALID &&
-                bluetooth_target_backend.state == TARGET_STATE_SCANNING) {
+                bluetooth_ble_backend.con_handle == HCI_CON_HANDLE_INVALID &&
+                bluetooth_ble_backend.state == TARGET_STATE_SCANNING) {
                 connect_to_peer(stack, peer_id);
             }
         }
@@ -609,58 +609,58 @@ static void hci_event_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
             bluetooth_transport_peer_info_t *peer =
                 find_discovered_by_address(&stack->transport, peer_address, peer_address_type);
 
-            bluetooth_target_backend.con_handle =
+            bluetooth_ble_backend.con_handle =
                 gap_subevent_le_connection_complete_get_connection_handle(packet);
-            bluetooth_target_backend.role =
+            bluetooth_ble_backend.role =
                 gap_subevent_le_connection_complete_get_role(packet) == 0U ? TARGET_ROLE_CENTRAL
                                                                            : TARGET_ROLE_PERIPHERAL;
             if (peer != NULL) {
-                bluetooth_target_backend.selected_peer_id = peer->peer_id;
+                bluetooth_ble_backend.selected_peer_id = peer->peer_id;
             }
-            if (bluetooth_target_backend.selected_peer_id == 0U) {
-                bluetooth_target_backend.selected_peer_id = stack->transport.pending_pair_peer_id;
+            if (bluetooth_ble_backend.selected_peer_id == 0U) {
+                bluetooth_ble_backend.selected_peer_id = stack->transport.pending_pair_peer_id;
             }
-            if (bluetooth_target_backend.selected_peer_id == 0U) {
-                gap_disconnect(bluetooth_target_backend.con_handle);
+            if (bluetooth_ble_backend.selected_peer_id == 0U) {
+                gap_disconnect(bluetooth_ble_backend.con_handle);
                 return;
             }
 
-            transport_mark_connected(&stack->transport, bluetooth_target_backend.selected_peer_id);
-            stack->paired_peer_id = bluetooth_target_backend.selected_peer_id;
+            transport_mark_connected(&stack->transport, bluetooth_ble_backend.selected_peer_id);
+            stack->paired_peer_id = bluetooth_ble_backend.selected_peer_id;
             stack->connected = true;
 
-            if (bluetooth_target_backend.role == TARGET_ROLE_CENTRAL) {
-                bluetooth_target_backend.state = TARGET_STATE_DISCOVER_SERVICE;
+            if (bluetooth_ble_backend.role == TARGET_ROLE_CENTRAL) {
+                bluetooth_ble_backend.state = TARGET_STATE_DISCOVER_SERVICE;
                 gatt_client_discover_primary_services_by_uuid16(
-                    handle_gatt_client_event, bluetooth_target_backend.con_handle,
+                    handle_gatt_client_event, bluetooth_ble_backend.con_handle,
                     INTERCOM_SERVICE_UUID16);
             } else {
-                bluetooth_target_backend.state = TARGET_STATE_READY;
+                bluetooth_ble_backend.state = TARGET_STATE_READY;
                 printf("Accepted Bluetooth LE connection from peer %u.\n",
-                       (unsigned)bluetooth_target_backend.selected_peer_id);
+                       (unsigned)bluetooth_ble_backend.selected_peer_id);
             }
         }
         break;
     case HCI_EVENT_DISCONNECTION_COMPLETE:
-        if (bluetooth_target_backend.listener_registered) {
-            bluetooth_target_backend.listener_registered = false;
+        if (bluetooth_ble_backend.listener_registered) {
+            bluetooth_ble_backend.listener_registered = false;
             gatt_client_stop_listening_for_characteristic_value_updates(
-                &bluetooth_target_backend.notification_listener);
+                &bluetooth_ble_backend.notification_listener);
         }
-        transport_mark_disconnected(&stack->transport, bluetooth_target_backend.selected_peer_id);
-        bluetooth_target_backend.con_handle = HCI_CON_HANDLE_INVALID;
-        bluetooth_target_backend.role = TARGET_ROLE_NONE;
-        bluetooth_target_backend.notifications_enabled = false;
-        bluetooth_target_backend.notification_pending = false;
-        bluetooth_target_backend.server_outbox_count = 0U;
-        bluetooth_target_backend.state = TARGET_STATE_SCANNING;
+        transport_mark_disconnected(&stack->transport, bluetooth_ble_backend.selected_peer_id);
+        bluetooth_ble_backend.con_handle = HCI_CON_HANDLE_INVALID;
+        bluetooth_ble_backend.role = TARGET_ROLE_NONE;
+        bluetooth_ble_backend.notifications_enabled = false;
+        bluetooth_ble_backend.notification_pending = false;
+        bluetooth_ble_backend.server_outbox_count = 0U;
+        bluetooth_ble_backend.state = TARGET_STATE_SCANNING;
         stack->connected = false;
         stack->transport.backend_ready = true;
         update_advertising_data(stack);
         start_scanning();
         printf("Bluetooth LE peer %u disconnected.\n",
-               (unsigned)bluetooth_target_backend.selected_peer_id);
-        bluetooth_target_backend.selected_peer_id = 0U;
+               (unsigned)bluetooth_ble_backend.selected_peer_id);
+        bluetooth_ble_backend.selected_peer_id = 0U;
         break;
     case SM_EVENT_JUST_WORKS_REQUEST:
         sm_just_works_confirm(sm_event_just_works_request_get_handle(packet));
@@ -675,20 +675,20 @@ static bool target_backend_start(bluetooth_classic_stack_t *stack) {
         return false;
     }
 
-    bluetooth_target_backend.stack = stack;
+    bluetooth_ble_backend.stack = stack;
     stack->transport.network_connected = true;
     stack->transport.backend_ready = false;
 
-    if (bluetooth_target_backend.initialized) {
+    if (bluetooth_ble_backend.initialized) {
         hci_power_control(HCI_POWER_ON);
-        bluetooth_target_backend.state = TARGET_STATE_STARTING;
+        bluetooth_ble_backend.state = TARGET_STATE_STARTING;
         return true;
     }
 
-    memset(&bluetooth_target_backend, 0, sizeof(bluetooth_target_backend));
-    bluetooth_target_backend.stack = stack;
-    bluetooth_target_backend.con_handle = HCI_CON_HANDLE_INVALID;
-    bluetooth_target_backend.state = TARGET_STATE_STARTING;
+    memset(&bluetooth_ble_backend, 0, sizeof(bluetooth_ble_backend));
+    bluetooth_ble_backend.stack = stack;
+    bluetooth_ble_backend.con_handle = HCI_CON_HANDLE_INVALID;
+    bluetooth_ble_backend.state = TARGET_STATE_STARTING;
 
     l2cap_init();
     sm_init();
@@ -696,12 +696,12 @@ static bool target_backend_start(bluetooth_classic_stack_t *stack) {
     att_server_init(profile_data, att_read_callback, att_write_callback);
     gatt_client_init();
 
-    bluetooth_target_backend.hci_event_callback_registration.callback = hci_event_handler;
-    hci_add_event_handler(&bluetooth_target_backend.hci_event_callback_registration);
-    bluetooth_target_backend.event_handler_registered = true;
+    bluetooth_ble_backend.hci_event_callback_registration.callback = hci_event_handler;
+    hci_add_event_handler(&bluetooth_ble_backend.hci_event_callback_registration);
+    bluetooth_ble_backend.event_handler_registered = true;
     att_server_register_packet_handler(att_packet_handler);
-    bluetooth_target_backend.att_handler_registered = true;
-    bluetooth_target_backend.initialized = true;
+    bluetooth_ble_backend.att_handler_registered = true;
+    bluetooth_ble_backend.initialized = true;
 
     hci_power_control(HCI_POWER_ON);
     return true;
@@ -712,11 +712,11 @@ static bool target_backend_stop(bluetooth_classic_stack_t *stack) {
         return false;
     }
 
-    if (bluetooth_target_backend.initialized) {
+    if (bluetooth_ble_backend.initialized) {
         gap_stop_scan();
         gap_advertisements_enable(0);
-        if (bluetooth_target_backend.con_handle != HCI_CON_HANDLE_INVALID) {
-            gap_disconnect(bluetooth_target_backend.con_handle);
+        if (bluetooth_ble_backend.con_handle != HCI_CON_HANDLE_INVALID) {
+            gap_disconnect(bluetooth_ble_backend.con_handle);
         }
         hci_power_control(HCI_POWER_OFF);
     }
@@ -724,12 +724,12 @@ static bool target_backend_stop(bluetooth_classic_stack_t *stack) {
     stack->connected = false;
     stack->transport.backend_ready = false;
     stack->transport.network_connected = false;
-    bluetooth_target_backend.con_handle = HCI_CON_HANDLE_INVALID;
-    bluetooth_target_backend.selected_peer_id = 0U;
-    bluetooth_target_backend.role = TARGET_ROLE_NONE;
-    bluetooth_target_backend.notifications_enabled = false;
-    bluetooth_target_backend.notification_pending = false;
-    bluetooth_target_backend.server_outbox_count = 0U;
+    bluetooth_ble_backend.con_handle = HCI_CON_HANDLE_INVALID;
+    bluetooth_ble_backend.selected_peer_id = 0U;
+    bluetooth_ble_backend.role = TARGET_ROLE_NONE;
+    bluetooth_ble_backend.notifications_enabled = false;
+    bluetooth_ble_backend.notification_pending = false;
+    bluetooth_ble_backend.server_outbox_count = 0U;
     return true;
 }
 #endif
@@ -821,9 +821,9 @@ bool bluetooth_classic_stack_disconnect(bluetooth_classic_stack_t *stack, uint8_
     }
 
 #if defined(PICO_INTERCOM_TARGET)
-    if (bluetooth_target_backend.con_handle != HCI_CON_HANDLE_INVALID &&
-        bluetooth_target_backend.selected_peer_id == peer_id) {
-        gap_disconnect(bluetooth_target_backend.con_handle);
+    if (bluetooth_ble_backend.con_handle != HCI_CON_HANDLE_INVALID &&
+        bluetooth_ble_backend.selected_peer_id == peer_id) {
+        gap_disconnect(bluetooth_ble_backend.con_handle);
     }
 #endif
 
@@ -877,7 +877,7 @@ bool bluetooth_classic_stack_queue_packet(bluetooth_classic_stack_t *stack, uint
 #if defined(PICO_INTERCOM_TARGET)
     if (!stack->enabled || !stack->connected || payload == NULL || payload_len == 0U ||
         payload_len > BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN ||
-        target_peer != bluetooth_target_backend.selected_peer_id) {
+        target_peer != bluetooth_ble_backend.selected_peer_id) {
         return false;
     }
 
@@ -892,9 +892,9 @@ bool bluetooth_classic_stack_queue_packet(bluetooth_classic_stack_t *stack, uint
     stack->transport.last_source_peer = source_peer;
     stack->transport.last_target_peer = target_peer;
 
-    if (bluetooth_target_backend.role == TARGET_ROLE_CENTRAL) {
+    if (bluetooth_ble_backend.role == TARGET_ROLE_CENTRAL) {
         const int status = gatt_client_write_value_of_characteristic_without_response(
-            bluetooth_target_backend.con_handle, &bluetooth_target_backend.rx_characteristic,
+            bluetooth_ble_backend.con_handle, &bluetooth_ble_backend.rx_characteristic,
             packet.payload, (uint16_t)payload_len);
         if (status != ERROR_CODE_SUCCESS) {
             stack->transport.packets_dropped++;
