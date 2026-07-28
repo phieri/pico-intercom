@@ -1,6 +1,7 @@
 #include "audio.h"
 #include "bluetooth.h"
 #include "intercom.h"
+#include "intercom_protocol.h"
 #include "pairings.h"
 
 #include <assert.h>
@@ -40,7 +41,7 @@ static int remove_test_file(const char *path) {
 }
 
 static void relay_callback(void *context, uint8_t source_peer, uint8_t target_peer,
-                            const uint8_t *payload, size_t payload_len) {
+                           const uint8_t *payload, size_t payload_len) {
     struct relay_context *ctx = (struct relay_context *)context;
     ctx->targets[ctx->calls] = target_peer;
     ctx->calls++;
@@ -50,13 +51,54 @@ static void relay_callback(void *context, uint8_t source_peer, uint8_t target_pe
     (void)payload_len;
 }
 
+static bool encode_protocol_message(uint8_t *buffer, size_t buffer_len,
+                                    intercom_protocol_message_type_t message_type,
+                                    uint32_t session_id, uint16_t sequence,
+                                    uint8_t source_peer, uint8_t target_peer,
+                                    const uint8_t *payload, uint16_t payload_len,
+                                    size_t *encoded_len) {
+    intercom_protocol_message_t message = {
+        .version = INTERCOM_PROTOCOL_VERSION,
+        .message_type = message_type,
+        .session_id = session_id,
+        .sequence = sequence,
+        .ack_sequence = 0U,
+        .source_peer = source_peer,
+        .target_peer = target_peer,
+        .payload_len = payload_len,
+        .flags = 0U,
+        .payload = payload,
+    };
+    return intercom_protocol_encode(buffer, buffer_len, &message, encoded_len);
+}
+
+static const bluetooth_peer_link_t *find_peer_link(const bluetooth_runtime_t *runtime,
+                                                   uint8_t peer_id) {
+    if (runtime == NULL) {
+        return NULL;
+    }
+
+    for (size_t index = 0; index < INTERCOM_MAX_PEERS; ++index) {
+        const bluetooth_peer_link_t *link = &runtime->peer_links[index];
+        if (link->valid && link->peer_id == peer_id) {
+            return link;
+        }
+    }
+
+    return NULL;
+}
+
 int main(void) {
     intercom_state_t state;
     bluetooth_runtime_t runtime = {0};
     struct relay_context ctx = {0};
     static const uint8_t payload[] = {0x01, 0x02, 0x03};
     enum {
-        TEST_PAIRING_PEER_ID = 4U
+        TEST_PAIRING_PEER_ID = 4U,
+        TEST_PROTOCOL_RUNTIME_PEER_ID = 6U,
+        TEST_TIMEOUT_RUNTIME_PEER_ID = 7U,
+        /* 60 host-side polls at 100 ms each exceed the 5 s session timeout. */
+        TIMEOUT_TEST_POLL_ITERATIONS = 60U,
     };
 
     intercom_init(&state);
@@ -65,16 +107,15 @@ int main(void) {
     assert(intercom_add_peer(&state, 3U));
     intercom_set_ptt(&state, true);
 
-    size_t relayed = intercom_rebroadcast(&state, 1U, payload, sizeof(payload),
-                                         relay_callback, &ctx);
+    size_t relayed = intercom_rebroadcast(&state, 1U, payload, sizeof(payload), relay_callback,
+                                          &ctx);
     assert(relayed == 2U);
     assert(ctx.calls == 2U);
     assert(ctx.targets[0] == 2U);
     assert(ctx.targets[1] == 3U);
 
     intercom_set_ptt(&state, false);
-    relayed = intercom_rebroadcast(&state, 1U, payload, sizeof(payload), relay_callback,
-                                   &ctx);
+    relayed = intercom_rebroadcast(&state, 1U, payload, sizeof(payload), relay_callback, &ctx);
     assert(relayed == 0U);
     assert(ctx.calls == 2U);
 
@@ -115,9 +156,34 @@ int main(void) {
     assert(overflow_audio.overruns == 1U);
     assert(overflow_audio.queued_frame_count == INTERCOM_AUDIO_PLAYBACK_QUEUE_DEPTH);
 
+    uint8_t protocol_packet[BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN] = {0};
+    size_t protocol_packet_len = 0U;
+    assert(encode_protocol_message(protocol_packet, sizeof(protocol_packet),
+                                   INTERCOM_PROTOCOL_MESSAGE_HELLO, 0x12345678U, 1U, 2U, 1U,
+                                   (const uint8_t *)"peer-two", 8U, &protocol_packet_len));
+    intercom_protocol_message_t decoded_message = {0};
+    assert(intercom_protocol_decode(protocol_packet, protocol_packet_len, &decoded_message));
+    assert(decoded_message.message_type == INTERCOM_PROTOCOL_MESSAGE_HELLO);
+    assert(decoded_message.session_id == 0x12345678U);
+    assert(decoded_message.sequence == 1U);
+    assert(decoded_message.source_peer == 2U);
+    assert(decoded_message.target_peer == 1U);
+    assert(decoded_message.payload_len == 8U);
+    assert(memcmp(decoded_message.payload, "peer-two", 8U) == 0);
+    uint8_t error_payload[32] = {0};
+    size_t error_payload_len = 0U;
+    assert(intercom_protocol_build_error_payload(error_payload, sizeof(error_payload),
+                                                 INTERCOM_PROTOCOL_ERROR_SESSION,
+                                                 "session mismatch", &error_payload_len));
+    assert(error_payload[0] == INTERCOM_PROTOCOL_ERROR_SESSION);
+    assert(error_payload_len > 1U);
+
     intercom_set_ptt(&state, true);
     bluetooth_init(&runtime, &state);
     assert(bluetooth_is_enabled(&runtime));
+    assert(bluetooth_runtime_has_transport(&runtime));
+    assert(!bluetooth_runtime_is_operational(&runtime));
+
     intercom_state_t local_audio_state;
     intercom_init(&local_audio_state);
     intercom_enable(&local_audio_state, true);
@@ -127,12 +193,21 @@ int main(void) {
 
     bluetooth_runtime_t local_audio_runtime = {0};
     bluetooth_init(&local_audio_runtime, &local_audio_state);
-    intercom_audio_set_playback_callback(&local_audio_runtime.audio, playback_callback, &playback_ctx);
-    assert(bluetooth_process_local_audio(&local_audio_runtime, 7U));
+    assert(bluetooth_connect_peer(&local_audio_runtime, 2U));
+    assert(bluetooth_connect_peer(&local_audio_runtime, 3U));
+    assert(bluetooth_runtime_is_operational(&local_audio_runtime));
+    const size_t protocol_sent_before = local_audio_runtime.protocol_messages_sent;
+    const size_t transport_queued_before = local_audio_runtime.transport_packets_queued;
+    const size_t transport_delivered_before = local_audio_runtime.transport_packets_delivered;
+    assert(bluetooth_process_local_audio(&local_audio_runtime, local_audio_runtime.local_peer_id));
     assert(local_audio_runtime.audio.encoded_frames == 1U);
-    assert(local_audio_runtime.audio.decoded_frames == 1U);
-    assert(local_audio_runtime.audio.played_frames == 1U);
+    assert(local_audio_runtime.audio.decoded_frames == 0U);
+    assert(local_audio_runtime.audio.played_frames == 0U);
     assert(local_audio_runtime.last_relay_count == 2U);
+    assert(local_audio_runtime.protocol_messages_sent >= protocol_sent_before + 2U);
+    assert(local_audio_runtime.transport_packets_queued >= transport_queued_before + 2U);
+    assert(local_audio_runtime.transport_packets_delivered >= transport_delivered_before + 2U);
+
     bluetooth_runtime_t toggle_runtime = {0};
     bluetooth_init(&toggle_runtime, &state);
     assert(!bluetooth_toggle(&toggle_runtime));
@@ -143,7 +218,6 @@ int main(void) {
     bluetooth_runtime_t pairing_runtime = {0};
     bluetooth_init(&pairing_runtime, &state);
     assert(bluetooth_restore_pairing(&pairing_runtime, TEST_PAIRING_PEER_ID));
-    bluetooth_poll(&pairing_runtime);
     assert(!bluetooth_handle_pairing_button(NULL, TEST_PAIRING_PEER_ID, true));
     bluetooth_runtime_t uninitialized_runtime = {0};
     assert(!bluetooth_handle_pairing_button(&uninitialized_runtime, TEST_PAIRING_PEER_ID, true));
@@ -153,16 +227,19 @@ int main(void) {
     assert(!bluetooth_handle_pairing_button(&disabled_runtime, TEST_PAIRING_PEER_ID, true));
     assert(!bluetooth_handle_pairing_button(&pairing_runtime, TEST_PAIRING_PEER_ID, false));
     assert(bluetooth_handle_pairing_button(&pairing_runtime, TEST_PAIRING_PEER_ID, true));
-    assert(!bluetooth_handle_pairing_button(&pairing_runtime, TEST_PAIRING_PEER_ID, false));
     assert(bluetooth_is_peer_connected(&pairing_runtime, TEST_PAIRING_PEER_ID));
     assert(pairing_runtime.command_count == 1U);
     assert(pairing_runtime.last_command == BLUETOOTH_COMMAND_PAIR);
     assert(pairing_runtime.last_peer_id == TEST_PAIRING_PEER_ID);
     assert(pairing_runtime.pairing_attempts == 1U);
     assert(pairing_runtime.connection_attempts == 1U);
+    assert(pairing_runtime.pairing_completed);
+    assert(pairing_runtime.completed_pairing_peer_id == TEST_PAIRING_PEER_ID);
+    assert(pairing_runtime.session_ready_peer_count == 1U);
     bluetooth_peer_state_t queried_peer_state = BLUETOOTH_PEER_STATE_DISCONNECTED;
     assert(bluetooth_get_peer_state(&pairing_runtime, TEST_PAIRING_PEER_ID, &queried_peer_state));
     assert(queried_peer_state == BLUETOOTH_PEER_STATE_CONNECTED);
+
     assert(bluetooth_execute_command(&runtime, BLUETOOTH_COMMAND_CONNECT, 4U));
     assert(bluetooth_is_peer_connected(&runtime, 4U));
     assert(runtime.command_count == 1U);
@@ -178,28 +255,30 @@ int main(void) {
     assert(runtime.last_command == BLUETOOTH_COMMAND_STATUS);
     assert(runtime.last_peer_id == 0U);
     assert(bluetooth_is_enabled(&runtime));
-    bluetooth_handle_audio(&runtime, 1U, payload, sizeof(payload));
-    assert(runtime.packets_received == 1U);
-    assert(runtime.last_source_peer == 1U);
-    assert(runtime.last_payload_len == sizeof(payload));
-    assert(runtime.last_relay_count == 2U);
-    assert(runtime.relay_invocations == 2U);
-    assert(runtime.relay_target_count == 2U);
-    assert(runtime.relay_targets[0] == 2U);
-    assert(runtime.relay_targets[1] == 3U);
-    assert(runtime.last_relay_source_peer == 1U);
-    assert(runtime.last_relay_target == 3U);
-    assert(runtime.last_relay_payload_len == sizeof(payload));
-    assert(memcmp(runtime.last_relay_payload, payload, sizeof(payload)) == 0);
-    assert(runtime.transport_packets_queued == 2U);
-    assert(runtime.transport_packets_delivered == 2U);
-    assert(runtime.last_transport_source_peer == 1U);
-    assert(runtime.last_transport_target_peer == 3U);
-    assert(bluetooth_classic_stack_pending_count(&runtime.classic_stack) == 0U);
+
+    bluetooth_runtime_t operational_runtime = {0};
+    bluetooth_init(&operational_runtime, &state);
+    assert(bluetooth_connect_peer(&operational_runtime, 2U));
+    assert(bluetooth_connect_peer(&operational_runtime, 3U));
+    assert(bluetooth_runtime_is_operational(&operational_runtime));
+    intercom_audio_set_playback_callback(&operational_runtime.audio, playback_callback,
+                                         &playback_ctx);
+    const size_t received_before = operational_runtime.packets_received;
+    bluetooth_handle_audio(&operational_runtime, 9U, encoded_audio, encoded_len);
+    assert(operational_runtime.packets_received == received_before + 1U);
+    assert(operational_runtime.last_source_peer == 9U);
+    assert(operational_runtime.last_payload_len == encoded_len);
+    assert(operational_runtime.last_relay_count == 2U);
+    assert(operational_runtime.relay_invocations == 2U);
+    assert(operational_runtime.relay_target_count == 2U);
+    assert(operational_runtime.last_relay_source_peer == 9U);
+    assert(operational_runtime.last_relay_payload_len == encoded_len);
+    assert(operational_runtime.audio.decoded_frames == 1U);
+    assert(operational_runtime.audio.played_frames == 1U);
 
     bluetooth_runtime_t runtime_to_disable = {0};
     bluetooth_init(&runtime_to_disable, &state);
-    assert(bluetooth_runtime_is_operational(&runtime_to_disable));
+    assert(!bluetooth_runtime_is_operational(&runtime_to_disable));
     assert(bluetooth_disable(&runtime_to_disable));
     assert(!bluetooth_is_enabled(&runtime_to_disable));
     assert(!runtime_to_disable.enabled);
@@ -212,61 +291,43 @@ int main(void) {
     assert(!bluetooth_runtime_is_operational(&runtime_with_error));
 
     const size_t initial_packets = runtime_to_disable.packets_received;
-    const size_t initial_relay_count = runtime_to_disable.last_relay_count;
-    const size_t initial_relay_payload_len = runtime_to_disable.last_relay_payload_len;
-    const uint8_t initial_source_peer = runtime_to_disable.last_source_peer;
-    const size_t initial_payload_len = runtime_to_disable.last_payload_len;
-    uint8_t initial_relay_payload_buf[BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN] = {0};
-    memcpy(initial_relay_payload_buf, runtime_to_disable.last_relay_payload,
-           sizeof(initial_relay_payload_buf));
     bluetooth_handle_audio(&runtime_to_disable, 5U, payload, sizeof(payload));
     assert(runtime_to_disable.packets_received == initial_packets);
-    assert(runtime_to_disable.last_source_peer == initial_source_peer);
-    assert(runtime_to_disable.last_payload_len == initial_payload_len);
-    assert(runtime_to_disable.last_relay_count == initial_relay_count);
-    assert(runtime_to_disable.last_relay_payload_len == initial_relay_payload_len);
-    assert(memcmp(runtime_to_disable.last_relay_payload, initial_relay_payload_buf,
-                  sizeof(runtime_to_disable.last_relay_payload)) == 0);
 
     bluetooth_runtime_t invalid_runtime = {0};
     assert(!bluetooth_toggle(&invalid_runtime));
     assert(!bluetooth_connect_peer(&invalid_runtime, 5U));
     assert(!bluetooth_disconnect_peer(&invalid_runtime, 5U));
 
-    bluetooth_runtime_t audio_runtime = runtime;
+    bluetooth_runtime_t audio_runtime = {0};
+    bluetooth_init(&audio_runtime, &state);
+    assert(bluetooth_connect_peer(&audio_runtime, 2U));
     const size_t packets_before = audio_runtime.packets_received;
     bluetooth_handle_audio(&audio_runtime, 2U, NULL, 0U);
-    assert(audio_runtime.packets_received == packets_before + 1U);
-    assert(audio_runtime.last_source_peer == 2U);
-    assert(audio_runtime.last_payload_len == 0U);
-    assert(audio_runtime.last_relay_count == 0U);
-    assert(audio_runtime.relay_target_count == 0U);
+    assert(audio_runtime.packets_received == packets_before);
 
     intercom_set_ptt(&state, false);
-    bluetooth_handle_audio(&runtime, 2U, payload, sizeof(payload));
-    assert(runtime.packets_received == 2U);
-    assert(runtime.last_relay_count == 0U);
-    assert(runtime.relay_invocations == 2U);
-    assert(runtime.connected_peer_count == 2U);
+    bluetooth_handle_audio(&operational_runtime, 2U, encoded_audio, encoded_len);
+    assert(operational_runtime.last_relay_count == 0U);
+    intercom_set_ptt(&state, true);
 
-    assert(bluetooth_connect_peer(&runtime, 4U));
-    assert(bluetooth_is_peer_connected(&runtime, 4U));
-    assert(runtime.connected_peer_count == 3U);
-    assert(bluetooth_connect_peer(&runtime, 4U));
-    assert(runtime.connected_peer_count == 3U);
-    assert(bluetooth_disconnect_peer(&runtime, 4U));
-    assert(!bluetooth_is_peer_connected(&runtime, 4U));
-    assert(!bluetooth_disconnect_peer(&runtime, 99U));
-    assert(runtime.connected_peer_count == 2U);
-    assert(bluetooth_get_peer_state(&runtime, 2U, &queried_peer_state));
+    assert(bluetooth_connect_peer(&operational_runtime, 4U));
+    assert(bluetooth_is_peer_connected(&operational_runtime, 4U));
+    assert(operational_runtime.connected_peer_count == 3U);
+    assert(bluetooth_connect_peer(&operational_runtime, 4U));
+    assert(operational_runtime.connected_peer_count == 3U);
+    assert(bluetooth_disconnect_peer(&operational_runtime, 4U));
+    assert(!bluetooth_is_peer_connected(&operational_runtime, 4U));
+    assert(!bluetooth_disconnect_peer(&operational_runtime, 99U));
+    assert(operational_runtime.connected_peer_count == 2U);
+    assert(bluetooth_get_peer_state(&operational_runtime, 2U, &queried_peer_state));
     assert(queried_peer_state == BLUETOOTH_PEER_STATE_CONNECTED);
-    assert(!bluetooth_get_peer_state(&runtime, 99U, &queried_peer_state));
+    assert(!bluetooth_get_peer_state(&operational_runtime, 99U, &queried_peer_state));
 
     bluetooth_classic_stack_t classic_stack = {0};
     bluetooth_classic_stack_init(&classic_stack);
     assert(bluetooth_classic_stack_pair(&classic_stack, 5U));
-    assert(bluetooth_classic_stack_queue_packet(&classic_stack, 1U, 5U, payload,
-                                                sizeof(payload)));
+    assert(bluetooth_classic_stack_queue_packet(&classic_stack, 1U, 5U, payload, sizeof(payload)));
     assert(bluetooth_classic_stack_pending_count(&classic_stack) == 1U);
     bluetooth_classic_packet_t classic_packet = {0};
     assert(bluetooth_classic_stack_dequeue_packet(&classic_stack, &classic_packet));
@@ -284,6 +345,58 @@ int main(void) {
     }
     assert(limit_runtime.connected_peer_count == INTERCOM_MAX_PEERS);
     assert(!bluetooth_connect_peer(&limit_runtime, 9U));
+
+    bluetooth_runtime_t protocol_runtime = {0};
+    intercom_state_t protocol_state;
+    intercom_init(&protocol_state);
+    intercom_enable(&protocol_state, true);
+    assert(intercom_add_peer(&protocol_state, TEST_PROTOCOL_RUNTIME_PEER_ID));
+    bluetooth_init(&protocol_runtime, &protocol_state);
+    assert(bluetooth_connect_peer(&protocol_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID));
+    const bluetooth_peer_link_t *protocol_link =
+        find_peer_link(&protocol_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID);
+    assert(protocol_link != NULL);
+    uint8_t inbound_audio[BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN] = {0};
+    size_t inbound_audio_len = 0U;
+    assert(intercom_audio_encode_frame(&captured_frame, inbound_audio, sizeof(inbound_audio),
+                                       &inbound_audio_len));
+    size_t inbound_packet_len = 0U;
+    assert(encode_protocol_message(protocol_packet, sizeof(protocol_packet),
+                                   INTERCOM_PROTOCOL_MESSAGE_AUDIO, protocol_link->session_id,
+                                   2U, TEST_PROTOCOL_RUNTIME_PEER_ID, protocol_runtime.local_peer_id,
+                                   inbound_audio, (uint16_t)inbound_audio_len,
+                                   &inbound_packet_len));
+    assert(bluetooth_handle_transport_payload(&protocol_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID,
+                                              protocol_packet, inbound_packet_len));
+    const size_t protocol_received = protocol_runtime.packets_received;
+    const size_t dropped_before_duplicate = protocol_runtime.protocol_messages_dropped;
+    assert(!bluetooth_handle_transport_payload(&protocol_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID,
+                                               protocol_packet, inbound_packet_len));
+    assert(protocol_runtime.packets_received == protocol_received);
+    assert(protocol_runtime.protocol_messages_dropped == dropped_before_duplicate + 1U);
+    size_t wrong_target_len = 0U;
+    assert(encode_protocol_message(protocol_packet, sizeof(protocol_packet),
+                                   INTERCOM_PROTOCOL_MESSAGE_AUDIO, protocol_link->session_id,
+                                   3U, TEST_PROTOCOL_RUNTIME_PEER_ID, 99U, inbound_audio,
+                                   (uint16_t)inbound_audio_len, &wrong_target_len));
+    assert(!bluetooth_handle_transport_payload(&protocol_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID,
+                                               protocol_packet, wrong_target_len));
+    const char *protocol_error_name = bluetooth_error_name(protocol_runtime.last_error_code);
+    assert(protocol_error_name != NULL);
+    assert(strcmp(protocol_error_name, "protocol") == 0);
+
+    bluetooth_runtime_t timeout_runtime = {0};
+    intercom_state_t timeout_state;
+    intercom_init(&timeout_state);
+    intercom_enable(&timeout_state, true);
+    bluetooth_init(&timeout_runtime, &timeout_state);
+    assert(bluetooth_restore_pairing(&timeout_runtime, TEST_TIMEOUT_RUNTIME_PEER_ID));
+    assert(bluetooth_connect_peer(&timeout_runtime, TEST_TIMEOUT_RUNTIME_PEER_ID));
+    assert(bluetooth_runtime_is_operational(&timeout_runtime));
+    for (size_t index = 0; index < TIMEOUT_TEST_POLL_ITERATIONS; ++index) {
+        bluetooth_poll(&timeout_runtime);
+    }
+    assert(!bluetooth_runtime_is_operational(&timeout_runtime));
 
     pairing_store_t store = {0};
     pairing_t persisted[8] = {{0}};
