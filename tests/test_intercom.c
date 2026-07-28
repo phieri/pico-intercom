@@ -72,20 +72,30 @@ static bool encode_protocol_message(uint8_t *buffer, size_t buffer_len,
     return intercom_protocol_encode(buffer, buffer_len, &message, encoded_len);
 }
 
-static const bluetooth_peer_link_t *find_peer_link(const bluetooth_runtime_t *runtime,
-                                                   uint8_t peer_id) {
+static bluetooth_peer_link_t *find_peer_link_internal(bluetooth_runtime_t *runtime,
+                                                     uint8_t peer_id) {
     if (runtime == NULL) {
         return NULL;
     }
 
     for (size_t index = 0; index < INTERCOM_MAX_PEERS; ++index) {
-        const bluetooth_peer_link_t *link = &runtime->peer_links[index];
+        bluetooth_peer_link_t *link = &runtime->peer_links[index];
         if (link->valid && link->peer_id == peer_id) {
             return link;
         }
     }
 
     return NULL;
+}
+
+static const bluetooth_peer_link_t *find_peer_link(bluetooth_runtime_t *runtime,
+                                                   uint8_t peer_id) {
+    return (const bluetooth_peer_link_t *)find_peer_link_internal(runtime, peer_id);
+}
+
+static bluetooth_peer_link_t *find_peer_link_writable(bluetooth_runtime_t *runtime,
+                                                      uint8_t peer_id) {
+    return find_peer_link_internal(runtime, peer_id);
 }
 
 int main(void) {
@@ -385,6 +395,35 @@ int main(void) {
     assert(protocol_error_name != NULL);
     assert(strcmp(protocol_error_name, "protocol") == 0);
 
+    bluetooth_runtime_t handshake_runtime = {0};
+    intercom_state_t handshake_state;
+    intercom_init(&handshake_state);
+    intercom_enable(&handshake_state, true);
+    assert(intercom_add_peer(&handshake_state, TEST_PROTOCOL_RUNTIME_PEER_ID));
+    bluetooth_init(&handshake_runtime, &handshake_state);
+    assert(bluetooth_connect_peer(&handshake_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID));
+    assert(handshake_runtime.intercom != NULL);
+    assert(handshake_runtime.intercom->peer_count == 1U);
+    assert(handshake_runtime.intercom->peers[0] == TEST_PROTOCOL_RUNTIME_PEER_ID);
+
+    bluetooth_peer_link_t *handshake_link = find_peer_link_writable(&handshake_runtime,
+                                                                     TEST_PROTOCOL_RUNTIME_PEER_ID);
+    assert(handshake_link != NULL);
+    assert(handshake_link->session_active);
+    assert(handshake_link->hello_sent);
+    handshake_link->session_active = false;
+    handshake_link->hello_sent = false;
+    handshake_link->link_state = BLUETOOTH_LINK_STATE_CONNECTING;
+    handshake_link->last_handshake_ms = 0U;
+
+    const size_t handshake_messages_before = handshake_runtime.protocol_messages_sent;
+    bluetooth_poll(&handshake_runtime);
+    assert(handshake_runtime.protocol_messages_sent > handshake_messages_before);
+    assert(handshake_link->hello_sent);
+    assert(handshake_runtime.intercom->peer_count == 1U);
+    assert(bluetooth_disconnect_peer(&handshake_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID));
+    assert(handshake_runtime.intercom->peer_count == 0U);
+
     bluetooth_runtime_t timeout_runtime = {0};
     intercom_state_t timeout_state;
     intercom_init(&timeout_state);
@@ -393,10 +432,13 @@ int main(void) {
     assert(bluetooth_restore_pairing(&timeout_runtime, TEST_TIMEOUT_RUNTIME_PEER_ID));
     assert(bluetooth_connect_peer(&timeout_runtime, TEST_TIMEOUT_RUNTIME_PEER_ID));
     assert(bluetooth_runtime_is_operational(&timeout_runtime));
+    assert(timeout_runtime.intercom != NULL);
+    assert(timeout_runtime.intercom->peer_count == 1U);
     for (size_t index = 0; index < TIMEOUT_TEST_POLL_ITERATIONS; ++index) {
         bluetooth_poll(&timeout_runtime);
     }
     assert(!bluetooth_runtime_is_operational(&timeout_runtime));
+    assert(timeout_runtime.intercom->peer_count == 0U);
 
     pairing_store_t store = {0};
     pairing_t persisted[8] = {{0}};
