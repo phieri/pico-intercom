@@ -296,6 +296,23 @@ static bool bluetooth_is_link_connected(const bluetooth_runtime_t *runtime, uint
     return bluetooth_has_peer(runtime, peer_id);
 }
 
+static void bluetooth_set_reconnect_blocked(bluetooth_runtime_t *runtime, uint8_t peer_id,
+                                            bool blocked) {
+    if (runtime == NULL || peer_id == 0U) {
+        return;
+    }
+
+    for (size_t index = 0; index < INTERCOM_MAX_PEERS; ++index) {
+        bluetooth_transport_peer_info_t *peer =
+            &runtime->classic_stack.transport.discovered_peers[index];
+        if (!peer->valid || peer->peer_id != peer_id) {
+            continue;
+        }
+        peer->reconnect_blocked = blocked;
+        return;
+    }
+}
+
 static void bluetooth_flush_classic_packets(bluetooth_runtime_t *runtime) {
     if (runtime == NULL) {
         return;
@@ -573,6 +590,7 @@ static void bluetooth_service_protocol_links(bluetooth_runtime_t *runtime) {
             bluetooth_record_error(runtime, link->peer_id, BLUETOOTH_ERROR_NOT_READY);
             bluetooth_note_disconnected_link(runtime, link->peer_id);
             (void)bluetooth_classic_stack_disconnect(&runtime->classic_stack, link->peer_id);
+            bluetooth_set_reconnect_blocked(runtime, link->peer_id, false);
         } else if (now_ms - link->last_activity_ms >= BLUETOOTH_KEEPALIVE_MS) {
             (void)bluetooth_queue_protocol_message(runtime, link->peer_id,
                                                    INTERCOM_PROTOCOL_MESSAGE_KEEPALIVE, NULL, 0U,

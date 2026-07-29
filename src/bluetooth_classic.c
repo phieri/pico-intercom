@@ -63,6 +63,8 @@ static bool bluetooth_classic_has_connected_peer(const bluetooth_classic_stack_t
 static bluetooth_transport_peer_info_t *bluetooth_classic_get_peer(bluetooth_classic_stack_t *stack,
                                                                    uint8_t peer_id,
                                                                    bool create);
+static size_t bluetooth_classic_drop_outbound_for_peer(bluetooth_classic_stack_t *stack,
+                                                       uint8_t peer_id);
 
 static void bluetooth_classic_refresh_connected_flag(bluetooth_classic_stack_t *stack) {
     if (stack == NULL) {
@@ -113,6 +115,7 @@ static void bluetooth_classic_mark_connecting(bluetooth_classic_stack_t *stack, 
 
     peer->pairing_pending = true;
     peer->disconnect_requested = false;
+    peer->reconnect_blocked = false;
     peer->last_state_change_ms = stack->transport.last_poll_ms;
     stack->transport.peer_states[slot] = BLUETOOTH_TRANSPORT_STATE_CONNECTING;
     bluetooth_classic_refresh_connected_flag(stack);
@@ -224,6 +227,7 @@ static void bluetooth_classic_mark_connected(bluetooth_classic_stack_t *stack, u
     peer->paired = true;
     peer->pairing_pending = false;
     peer->disconnect_requested = false;
+    peer->reconnect_blocked = false;
     peer->audio_ready = true;
     peer->last_connected_ms = stack->transport.last_poll_ms;
     peer->last_state_change_ms = stack->transport.last_poll_ms;
@@ -262,6 +266,7 @@ static void bluetooth_classic_mark_disconnected(bluetooth_classic_stack_t *stack
     bluetooth_transport_peer_info_t *peer = bluetooth_classic_get_peer(stack, peer_id, false);
     if (peer != NULL) {
         peer->pairing_pending = false;
+        peer->disconnect_requested = false;
         peer->paired = bluetooth_classic_peer_is_remembered(stack, peer_id);
         peer->last_disconnected_ms = stack->transport.last_poll_ms;
         peer->last_state_change_ms = stack->transport.last_poll_ms;
@@ -640,6 +645,7 @@ static void bluetooth_classic_backend_maybe_autoreconnect(bluetooth_classic_stac
     for (size_t index = 0; index < INTERCOM_MAX_PEERS; ++index) {
         bluetooth_transport_peer_info_t *peer = &stack->transport.discovered_peers[index];
         if (!peer->valid || !peer->audio_ready || peer->disconnect_requested ||
+            peer->reconnect_blocked ||
             bluetooth_classic_has_connected_peer(stack, peer->peer_id)) {
             continue;
         }
@@ -844,10 +850,10 @@ static void bluetooth_classic_backend_packet_handler(uint8_t packet_type, uint16
             }
             bluetooth_transport_peer_info_t *peer =
                 bluetooth_classic_get_peer(stack, backend_peer->peer_id, false);
-            const bool peer_requested_disconnect =
-                peer != NULL ? peer->disconnect_requested : false;
+            const bool reconnect_blocked =
+                peer != NULL ? peer->reconnect_blocked : false;
             const bool reconnect_requested =
-                !peer_requested_disconnect &&
+                !reconnect_blocked &&
                 (bluetooth_classic_peer_is_remembered(stack, backend_peer->peer_id) ||
                  (peer != NULL && peer->pairing_pending));
             bluetooth_classic_mark_disconnected(stack, backend_peer->peer_id);
@@ -1029,6 +1035,7 @@ bool bluetooth_classic_stack_pair(bluetooth_classic_stack_t *stack, uint8_t peer
         return false;
     }
     peer->pairing_pending = true;
+    peer->reconnect_blocked = false;
     if (!bluetooth_classic_remember_peer(stack, peer_id)) {
         return false;
     }
@@ -1064,6 +1071,7 @@ bool bluetooth_classic_stack_connect(bluetooth_classic_stack_t *stack, uint8_t p
     backend_peer->sdp_query_needed = backend_peer->rfcomm_channel == 0U;
     peer->pairing_pending = true;
     peer->disconnect_requested = false;
+    peer->reconnect_blocked = false;
     stack->paired_peer_id = peer_id;
     bluetooth_classic_mark_connecting(stack, peer_id);
     return true;
@@ -1088,6 +1096,10 @@ bool bluetooth_classic_stack_disconnect(bluetooth_classic_stack_t *stack, uint8_
         bluetooth_classic_backend_peer_by_id(peer_id, false);
     if (backend_peer == NULL) {
         return false;
+    }
+    bluetooth_transport_peer_info_t *peer = bluetooth_classic_get_peer(stack, peer_id, false);
+    if (peer != NULL) {
+        peer->reconnect_blocked = true;
     }
     backend_peer->connect_requested = false;
     backend_peer->sdp_query_needed = false;
@@ -1125,6 +1137,7 @@ bool bluetooth_classic_stack_restore_pairing(bluetooth_classic_stack_t *stack, u
         peer->paired = true;
         peer->pairing_pending = false;
         peer->disconnect_requested = false;
+        peer->reconnect_blocked = false;
     }
     bluetooth_classic_backend_peer_t *backend_peer =
         bluetooth_classic_backend_peer_by_id(peer_id, true);
