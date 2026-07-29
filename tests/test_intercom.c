@@ -486,6 +486,145 @@ int main(void) {
     assert(bluetooth_runtime_is_operational(&timeout_runtime));
     assert(timeout_runtime.intercom->peer_count == 1U);
 
+    /* Test: HELLO received via bluetooth_handle_transport_payload starts a session
+     * and causes a HELLO_ACK to be queued on the outbound transport. */
+    bluetooth_runtime_t hello_rx_runtime = {0};
+    intercom_state_t hello_rx_state;
+    intercom_init(&hello_rx_state);
+    intercom_enable(&hello_rx_state, true);
+    bluetooth_init(&hello_rx_runtime, &hello_rx_state);
+    assert(bluetooth_connect_peer(&hello_rx_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID));
+    bluetooth_peer_link_t *hello_rx_link =
+        find_peer_link_writable(&hello_rx_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID);
+    assert(hello_rx_link != NULL);
+    /* Reset to "connected but handshake not started" to exercise the HELLO receive path. */
+    hello_rx_link->session_active = false;
+    hello_rx_link->session_id = 0U;
+    hello_rx_link->hello_sent = false;
+    hello_rx_link->hello_received = false;
+    hello_rx_runtime.session_ready_peer_count = 0U;
+    uint8_t hello_rx_packet[BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN] = {0};
+    size_t hello_rx_len = 0U;
+    const uint32_t test_hello_session_id = 0x11223344U;
+    assert(encode_protocol_message(hello_rx_packet, sizeof(hello_rx_packet),
+                                   INTERCOM_PROTOCOL_MESSAGE_HELLO, test_hello_session_id,
+                                   1U, TEST_PROTOCOL_RUNTIME_PEER_ID,
+                                   hello_rx_runtime.local_peer_id,
+                                   (const uint8_t *)"headset-6", 9U, &hello_rx_len));
+    const size_t hello_tx_before = hello_rx_runtime.protocol_messages_sent;
+    const size_t hello_queued_before = hello_rx_runtime.transport_packets_queued;
+    assert(bluetooth_handle_transport_payload(&hello_rx_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID,
+                                              hello_rx_packet, hello_rx_len));
+    assert(hello_rx_link->session_active);
+    assert(hello_rx_link->session_id == test_hello_session_id);
+    assert(hello_rx_link->hello_received);
+    assert(hello_rx_runtime.session_ready_peer_count == 1U);
+    assert(hello_rx_runtime.protocol_messages_sent > hello_tx_before);
+    assert(hello_rx_runtime.transport_packets_queued > hello_queued_before);
+
+    /* Test: HELLO_ACK received via bluetooth_handle_transport_payload completes
+     * the session handshake and increments successful_connections. */
+    bluetooth_runtime_t hello_ack_runtime = {0};
+    intercom_state_t hello_ack_state;
+    intercom_init(&hello_ack_state);
+    intercom_enable(&hello_ack_state, true);
+    bluetooth_init(&hello_ack_runtime, &hello_ack_state);
+    assert(bluetooth_connect_peer(&hello_ack_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID));
+    bluetooth_peer_link_t *hello_ack_link =
+        find_peer_link_writable(&hello_ack_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID);
+    assert(hello_ack_link != NULL);
+    /* Capture the session_id that was assigned during connect. */
+    const uint32_t ack_session_id = hello_ack_link->session_id;
+    assert(ack_session_id != 0U);
+    /* Simulate "HELLO sent, waiting for ACK" by rolling back session_active. */
+    hello_ack_link->session_active = false;
+    hello_ack_link->hello_received = false;
+    hello_ack_link->hello_sent = true;
+    hello_ack_runtime.session_ready_peer_count = 0U;
+    hello_ack_runtime.successful_connections = 0U;
+    uint8_t hello_ack_packet[BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN] = {0};
+    size_t hello_ack_len = 0U;
+    assert(encode_protocol_message(hello_ack_packet, sizeof(hello_ack_packet),
+                                   INTERCOM_PROTOCOL_MESSAGE_HELLO_ACK, ack_session_id,
+                                   1U, TEST_PROTOCOL_RUNTIME_PEER_ID,
+                                   hello_ack_runtime.local_peer_id,
+                                   NULL, 0U, &hello_ack_len));
+    assert(bluetooth_handle_transport_payload(&hello_ack_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID,
+                                              hello_ack_packet, hello_ack_len));
+    assert(hello_ack_link->session_active);
+    assert(hello_ack_runtime.session_ready_peer_count == 1U);
+    assert(hello_ack_runtime.successful_connections == 1U);
+
+    /* Test: GOODBYE received via bluetooth_handle_transport_payload tears down the
+     * session, removes the peer from the intercom relay list, and marks the link
+     * as no longer active. */
+    bluetooth_runtime_t goodbye_runtime = {0};
+    intercom_state_t goodbye_state;
+    intercom_init(&goodbye_state);
+    intercom_enable(&goodbye_state, true);
+    assert(intercom_add_peer(&goodbye_state, TEST_PROTOCOL_RUNTIME_PEER_ID));
+    bluetooth_init(&goodbye_runtime, &goodbye_state);
+    assert(bluetooth_connect_peer(&goodbye_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID));
+    assert(bluetooth_runtime_is_operational(&goodbye_runtime));
+    assert(goodbye_runtime.intercom->peer_count == 1U);
+    bluetooth_peer_link_t *goodbye_link =
+        find_peer_link_writable(&goodbye_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID);
+    assert(goodbye_link != NULL);
+    const uint32_t goodbye_session_id = goodbye_link->session_id;
+    uint8_t goodbye_packet[BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN] = {0};
+    size_t goodbye_len = 0U;
+    assert(encode_protocol_message(goodbye_packet, sizeof(goodbye_packet),
+                                   INTERCOM_PROTOCOL_MESSAGE_GOODBYE, goodbye_session_id,
+                                   1U, TEST_PROTOCOL_RUNTIME_PEER_ID,
+                                   goodbye_runtime.local_peer_id,
+                                   NULL, 0U, &goodbye_len));
+    assert(bluetooth_handle_transport_payload(&goodbye_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID,
+                                              goodbye_packet, goodbye_len));
+    assert(!goodbye_link->session_active);
+    assert(!bluetooth_runtime_is_operational(&goodbye_runtime));
+    assert(goodbye_runtime.intercom->peer_count == 0U);
+
+    /* Test: ERROR message received via bluetooth_handle_transport_payload degrades the
+     * link state and increments the dropped message counter. */
+    bluetooth_runtime_t error_rx_runtime = {0};
+    intercom_state_t error_rx_state;
+    intercom_init(&error_rx_state);
+    intercom_enable(&error_rx_state, true);
+    assert(intercom_add_peer(&error_rx_state, TEST_PROTOCOL_RUNTIME_PEER_ID));
+    bluetooth_init(&error_rx_runtime, &error_rx_state);
+    assert(bluetooth_connect_peer(&error_rx_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID));
+    bluetooth_peer_link_t *error_rx_link =
+        find_peer_link_writable(&error_rx_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID);
+    assert(error_rx_link != NULL);
+    const uint32_t error_rx_session_id = error_rx_link->session_id;
+    uint8_t error_rx_payload[32] = {0};
+    size_t error_rx_payload_len = 0U;
+    assert(intercom_protocol_build_error_payload(error_rx_payload, sizeof(error_rx_payload),
+                                                 INTERCOM_PROTOCOL_ERROR_SESSION,
+                                                 "test error", &error_rx_payload_len));
+    uint8_t error_rx_packet[BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN] = {0};
+    size_t error_rx_len = 0U;
+    assert(encode_protocol_message(error_rx_packet, sizeof(error_rx_packet),
+                                   INTERCOM_PROTOCOL_MESSAGE_ERROR, error_rx_session_id,
+                                   1U, TEST_PROTOCOL_RUNTIME_PEER_ID,
+                                   error_rx_runtime.local_peer_id,
+                                   error_rx_payload, (uint16_t)error_rx_payload_len,
+                                   &error_rx_len));
+    const size_t dropped_before_error_rx = error_rx_runtime.protocol_messages_dropped;
+    assert(!bluetooth_handle_transport_payload(&error_rx_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID,
+                                               error_rx_packet, error_rx_len));
+    assert(error_rx_link->link_state == BLUETOOTH_LINK_STATE_DEGRADED);
+    assert(error_rx_runtime.protocol_messages_dropped > dropped_before_error_rx);
+
+    /* Test: bluetooth_classic_stack_local_peer_id returns the configured ID and
+     * normalises a zero peer ID to 1 to keep the ID in the valid range. */
+    bluetooth_classic_stack_t local_id_stack = {0};
+    bluetooth_classic_stack_init(&local_id_stack);
+    bluetooth_classic_stack_set_local_peer_id(&local_id_stack, 42U);
+    assert(bluetooth_classic_stack_local_peer_id(&local_id_stack) == 42U);
+    bluetooth_classic_stack_set_local_peer_id(&local_id_stack, 0U);
+    assert(bluetooth_classic_stack_local_peer_id(&local_id_stack) == 1U);
+
     pairing_store_t store = {0};
     pairing_t persisted[8] = {{0}};
     pairing_t new_pairing = {.peer_id = 4U, .name = "headset-4"};
