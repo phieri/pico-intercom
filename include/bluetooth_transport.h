@@ -14,6 +14,11 @@ extern "C" {
 #define BLUETOOTH_MAX_AUDIO_PAYLOAD_LEN 256U
 #define BLUETOOTH_TRANSPORT_QUEUE_DEPTH (INTERCOM_MAX_PEERS * 2U)
 #define BLUETOOTH_TRANSPORT_PEER_NAME_LEN 32U
+#define BLUETOOTH_TRANSPORT_DISCOVERY_TIMEOUT_MS 5000U
+
+typedef enum {
+    BLUETOOTH_TRANSPORT_MEDIUM_CLASSIC_HEADSET = 0
+} bluetooth_transport_medium_t;
 
 typedef enum {
     BLUETOOTH_TRANSPORT_STATE_DISCONNECTED = 0,
@@ -33,10 +38,14 @@ typedef struct {
     bool valid;
     bool paired;
     bool pairing_pending;
+    bool audio_ready;
     uint8_t peer_id;
     uint8_t address[6];
     uint8_t address_type;
     uint32_t last_seen_ms;
+    uint32_t last_connected_ms;
+    uint32_t last_disconnected_ms;
+    uint16_t reconnect_attempts;
     char name[BLUETOOTH_TRANSPORT_PEER_NAME_LEN];
 } bluetooth_transport_peer_info_t;
 
@@ -44,6 +53,7 @@ typedef struct {
     bool initialized;
     bool enabled;
     bool error;
+    bluetooth_transport_medium_t medium;
     uint8_t connected_peers[INTERCOM_MAX_PEERS];
     bluetooth_transport_state_t peer_states[INTERCOM_MAX_PEERS];
     size_t connected_peer_count;
@@ -74,6 +84,8 @@ bool bluetooth_transport_connect(bluetooth_transport_t *transport, uint8_t peer_
 bool bluetooth_transport_disconnect(bluetooth_transport_t *transport, uint8_t peer_id);
 bool bluetooth_transport_restore_pairing(bluetooth_transport_t *transport, uint8_t peer_id);
 bool bluetooth_transport_poll(bluetooth_transport_t *transport);
+bool bluetooth_transport_report_peer(bluetooth_transport_t *transport, uint8_t peer_id,
+                                     const char *name, bool audio_ready);
 bool bluetooth_transport_select_pairing_candidate(const bluetooth_transport_t *transport,
                                                   uint8_t *peer_id);
 bool bluetooth_transport_is_connected(const bluetooth_transport_t *transport, uint8_t peer_id);

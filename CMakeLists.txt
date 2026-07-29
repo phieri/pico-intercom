@@ -35,18 +35,13 @@ if(NOT PICO_INTERCOM_FORCE_HOST_BUILD)
         pico_stdlib
         hardware_flash
         hardware_sync
-        hardware_adc
-        hardware_pwm
         pico_cyw43_arch_none
-        pico_btstack_ble
+        pico_btstack_classic
         pico_btstack_cyw43
         pico_unique_id
     )
     target_include_directories(intercom_core PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}"
-    )
-    pico_btstack_make_gatt_header(intercom_core PUBLIC
-        "${CMAKE_CURRENT_LIST_DIR}/src/intercom_ble.gatt"
     )
 endif()
 

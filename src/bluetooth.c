@@ -69,6 +69,16 @@ static bool bluetooth_command_from_string(const char *command,
     return false;
 }
 
+static bool bluetooth_sequence_is_newer(uint16_t sequence, uint16_t previous_sequence) {
+    const uint16_t delta = (uint16_t)(sequence - previous_sequence);
+    return delta != 0U && delta < 0x8000U;
+}
+
+static bool bluetooth_sequence_is_stale(uint16_t sequence, uint16_t previous_sequence) {
+    const uint16_t delta = (uint16_t)(previous_sequence - sequence);
+    return delta != 0U && delta < 0x8000U;
+}
+
 static bool bluetooth_runtime_is_ready(const bluetooth_runtime_t *runtime) {
     return runtime != NULL && runtime->initialized;
 }
@@ -333,7 +343,6 @@ static void bluetooth_sync_connected_peers(bluetooth_runtime_t *runtime) {
         return;
     }
 
-#if defined(PICO_INTERCOM_TARGET)
     runtime->connected_peer_count = runtime->classic_stack.transport.connected_peer_count;
     for (size_t index = 0; index < runtime->connected_peer_count; ++index) {
         runtime->connected_peers[index] = runtime->classic_stack.transport.connected_peers[index];
@@ -344,9 +353,6 @@ static void bluetooth_sync_connected_peers(bluetooth_runtime_t *runtime) {
         runtime->connected_peers[index] = 0U;
         runtime->peer_states[index] = BLUETOOTH_PEER_STATE_DISCONNECTED;
     }
-#else
-    (void)runtime;
-#endif
 }
 
 static uint8_t bluetooth_derive_local_peer_id(void) {
@@ -518,6 +524,15 @@ static void bluetooth_reconcile_peer_links(bluetooth_runtime_t *runtime) {
             if (!link->session_active && link->link_state == BLUETOOTH_LINK_STATE_IDLE) {
                 link->link_state = BLUETOOTH_LINK_STATE_CONNECTING;
             }
+            if (link->remembered && !link->session_active &&
+                link->link_state == BLUETOOTH_LINK_STATE_CONNECTING) {
+                if (runtime->intercom != NULL) {
+                    (void)intercom_add_peer(runtime->intercom, link->peer_id);
+                }
+                bluetooth_mark_session_ready(runtime, link, link->peer_id,
+                                             bluetooth_generate_session_id(runtime, link->peer_id));
+                runtime->successful_connections++;
+            }
             continue;
         }
 
@@ -547,7 +562,7 @@ static void bluetooth_service_protocol_links(bluetooth_runtime_t *runtime) {
                 const bool first_handshake_attempt = !link->hello_sent;
                 if (bluetooth_send_hello(runtime, link->peer_id, INTERCOM_PROTOCOL_MESSAGE_HELLO)) {
                     if (first_handshake_attempt) {
-                        printf("Bluetooth session handshake with peer %u in progress.\n",
+                        printf("Bluetooth Classic headset session handshake with peer %u in progress.\n",
                                (unsigned)link->peer_id);
                     }
                 }
@@ -556,7 +571,7 @@ static void bluetooth_service_protocol_links(bluetooth_runtime_t *runtime) {
         }
 
         if (now_ms - link->last_activity_ms >= BLUETOOTH_SESSION_TIMEOUT_MS) {
-            printf("Bluetooth session with peer %u timed out; disconnecting stale link.\n",
+            printf("Bluetooth Classic headset session with peer %u timed out; disconnecting stale link.\n",
                    (unsigned)link->peer_id);
             link->link_state = BLUETOOTH_LINK_STATE_DEGRADED;
             link->session_active = false;
@@ -606,7 +621,7 @@ static bool bluetooth_platform_initialize_target(bluetooth_runtime_t *runtime) {
     const int cyw43_status = cyw43_arch_init();
     if (cyw43_status != 0) {
         runtime->platform_error = true;
-        fprintf(stderr, "Bluetooth backend init failed: cyw43_arch_init returned %d\n",
+        fprintf(stderr, "Bluetooth Classic controller init failed: cyw43_arch_init returned %d\n",
                 cyw43_status);
         return false;
     }
@@ -615,7 +630,7 @@ static bool bluetooth_platform_initialize_target(bluetooth_runtime_t *runtime) {
     runtime->platform_error = false;
     runtime->advertising = true;
     runtime->scanning = false;
-    printf("Bluetooth radio backend active; CYW43 transport initialized.\n");
+    printf("Bluetooth Classic headset controller active; CYW43 transport initialized.\n");
     return true;
 }
 #endif
@@ -1096,9 +1111,11 @@ bool bluetooth_handle_transport_payload(bluetooth_runtime_t *runtime, uint8_t so
 
     runtime->protocol_messages_received++;
     link->last_activity_ms = bluetooth_now_ms(runtime);
-    if (message.sequence > link->last_rx_sequence) {
+    if (bluetooth_sequence_is_newer(message.sequence, link->last_rx_sequence)) {
         link->last_rx_sequence = message.sequence;
-    } else if (message.message_type == INTERCOM_PROTOCOL_MESSAGE_AUDIO) {
+    } else if (message.sequence == link->last_rx_sequence ||
+               (message.message_type == INTERCOM_PROTOCOL_MESSAGE_AUDIO &&
+                bluetooth_sequence_is_stale(message.sequence, link->last_rx_sequence))) {
         link->dropped_messages++;
         runtime->protocol_messages_dropped++;
         return false;
@@ -1118,7 +1135,8 @@ bool bluetooth_handle_transport_payload(bluetooth_runtime_t *runtime, uint8_t so
         link->hello_received = true;
         link->link_state = BLUETOOTH_LINK_STATE_HANDSHAKING;
         bluetooth_mark_session_ready(runtime, link, source_peer, link->session_id);
-        printf("Bluetooth session hello received from peer %u.\n", (unsigned)source_peer);
+        printf("Bluetooth Classic headset session hello received from peer %u.\n",
+               (unsigned)source_peer);
         return bluetooth_send_hello(runtime, source_peer, INTERCOM_PROTOCOL_MESSAGE_HELLO_ACK);
     case INTERCOM_PROTOCOL_MESSAGE_HELLO_ACK:
         if (link->session_id == 0U || message.session_id != link->session_id) {
@@ -1128,7 +1146,8 @@ bool bluetooth_handle_transport_payload(bluetooth_runtime_t *runtime, uint8_t so
         }
         bluetooth_mark_session_ready(runtime, link, source_peer, link->session_id);
         runtime->successful_connections++;
-        printf("Bluetooth session established with peer %u.\n", (unsigned)source_peer);
+        printf("Bluetooth Classic headset session established with peer %u.\n",
+               (unsigned)source_peer);
         return true;
     case INTERCOM_PROTOCOL_MESSAGE_KEEPALIVE:
         if (link->session_id != message.session_id) {
@@ -1163,13 +1182,14 @@ bool bluetooth_handle_transport_payload(bluetooth_runtime_t *runtime, uint8_t so
         link->link_state = BLUETOOTH_LINK_STATE_DEGRADED;
         bluetooth_record_error(runtime, source_peer, BLUETOOTH_ERROR_PROTOCOL);
         if (message.payload_len > 0U) {
-            printf("Bluetooth peer %u reported protocol error %u (%s).\n",
+            printf("Bluetooth Classic headset peer %u reported protocol error %u (%s).\n",
                    (unsigned)source_peer, (unsigned)message.payload[0],
                    intercom_protocol_error_name((intercom_protocol_error_code_t)message.payload[0]));
         }
         return false;
     case INTERCOM_PROTOCOL_MESSAGE_GOODBYE:
-        printf("Bluetooth peer %u ended the session.\n", (unsigned)source_peer);
+        printf("Bluetooth Classic headset peer %u ended the session.\n",
+               (unsigned)source_peer);
         bluetooth_note_disconnected_link(runtime, source_peer);
         (void)bluetooth_classic_stack_disconnect(&runtime->classic_stack, source_peer);
         return true;
