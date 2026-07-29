@@ -8,7 +8,7 @@
 #define ENABLE_PRINTF 1
 #define ENABLE_PRINTF_HEXDUMP 1
 #define ENABLE_BLE 1
-#define ENABLE_CLASSIC 0
+/* Classic support is intentionally left disabled; use #define ENABLE_CLASSIC to enable it. */
 #define ENABLE_LE_PERIPHERAL 1
 #define ENABLE_LE_CENTRAL 1
 
