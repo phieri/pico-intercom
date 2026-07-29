@@ -336,8 +336,10 @@ int main(void) {
 
     bluetooth_classic_stack_t classic_stack = {0};
     bluetooth_classic_stack_init(&classic_stack);
+    assert(strcmp(bluetooth_classic_stack_state_name(&classic_stack), "discoverable") == 0);
     assert(bluetooth_classic_stack_report_headset(&classic_stack, 5U, "headset-5", true));
     assert(bluetooth_classic_stack_pair(&classic_stack, 5U));
+    assert(strcmp(bluetooth_classic_stack_state_name(&classic_stack), "connected") == 0);
     assert(bluetooth_classic_stack_queue_packet(&classic_stack, 1U, 5U, payload, sizeof(payload)));
     assert(bluetooth_classic_stack_pending_count(&classic_stack) == 1U);
     bluetooth_classic_packet_t classic_packet = {0};
@@ -355,6 +357,12 @@ int main(void) {
     while (bluetooth_classic_stack_dequeue_packet(&classic_stack, &classic_packet)) {
     }
     assert(bluetooth_classic_stack_pending_count(&classic_stack) == 0U);
+    assert(bluetooth_classic_stack_disconnect(&classic_stack, 5U));
+    assert(strcmp(bluetooth_classic_stack_state_name(&classic_stack), "discoverable") == 0);
+    assert(bluetooth_classic_stack_set_enabled(&classic_stack, false));
+    assert(strcmp(bluetooth_classic_stack_state_name(&classic_stack), "disabled") == 0);
+    assert(bluetooth_classic_stack_set_enabled(&classic_stack, true));
+    assert(strcmp(bluetooth_classic_stack_state_name(&classic_stack), "discoverable") == 0);
 
     bluetooth_classic_stack_t reconnect_stack = {0};
     bluetooth_classic_stack_init(&reconnect_stack);
