@@ -341,7 +341,7 @@ bool bluetooth_transport_report_peer(bluetooth_transport_t *transport, uint8_t p
     peer->last_seen_ms = transport->last_poll_ms;
     if (name != NULL && name[0] != '\0') {
         int written = snprintf(peer->name, sizeof(peer->name), "%s", name);
-        if (written < 0 || (size_t)written >= sizeof(peer->name)) {
+        if (written < 0) {
             return false;
         }
     } else if (peer->name[0] == '\0') {
@@ -367,8 +367,8 @@ bool bluetooth_transport_poll(bluetooth_transport_t *transport) {
             continue;
         }
 
-        if (transport->last_poll_ms > peer->last_seen_ms &&
-            (transport->last_poll_ms - peer->last_seen_ms) > BLUETOOTH_TRANSPORT_DISCOVERY_TIMEOUT_MS) {
+        if ((transport->last_poll_ms - peer->last_seen_ms) >
+            BLUETOOTH_TRANSPORT_DISCOVERY_TIMEOUT_MS) {
             bluetooth_transport_purge_stale_peer(transport, index);
             continue;
         }

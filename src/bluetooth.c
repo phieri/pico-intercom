@@ -519,7 +519,6 @@ static void bluetooth_reconcile_peer_links(bluetooth_runtime_t *runtime) {
             if (!link->session_active && link->link_state == BLUETOOTH_LINK_STATE_IDLE) {
                 link->link_state = BLUETOOTH_LINK_STATE_CONNECTING;
             }
-#if !defined(PICO_INTERCOM_TARGET)
             if (link->remembered && !link->session_active &&
                 link->link_state == BLUETOOTH_LINK_STATE_CONNECTING) {
                 if (runtime->intercom != NULL) {
@@ -529,7 +528,6 @@ static void bluetooth_reconcile_peer_links(bluetooth_runtime_t *runtime) {
                                              bluetooth_generate_session_id(runtime, link->peer_id));
                 runtime->successful_connections++;
             }
-#endif
             continue;
         }
 
