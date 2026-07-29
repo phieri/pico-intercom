@@ -1,5 +1,5 @@
-#ifndef BLUETOOTH_H
-#define BLUETOOTH_H
+#ifndef INTERCOM_BLUETOOTH_H
+#define INTERCOM_BLUETOOTH_H
 
 #include <stdbool.h>
 #include <stddef.h>

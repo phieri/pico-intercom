@@ -1,4 +1,4 @@
-#include "bluetooth.h"
+#include "intercom_bluetooth.h"
 #include "pairings.h"
 
 #ifdef PICO_INTERCOM_TARGET

@@ -6,12 +6,20 @@
 #define ENABLE_LOG_INFO 1
 #define ENABLE_LOG_ERROR 1
 #define ENABLE_PRINTF 1
+#define ENABLE_PRINTF_HEXDUMP 1
 #define ENABLE_BLE 1
-#define ENABLE_CLASSIC 0
+/* Classic support is intentionally left disabled; use #define ENABLE_CLASSIC to enable it. */
+#define ENABLE_LE_PERIPHERAL 1
+#define ENABLE_LE_CENTRAL 1
+
+/* Use malloc-backed buffers so BTstack can grow its ATT database as needed. */
+#define HAVE_MALLOC 1
+#define MAX_ATT_DB_SIZE 512
 
 #define MAX_NR_GATT_CLIENTS 1
 #define MAX_NR_HCI_CONNECTIONS 1
 #define MAX_NR_LE_DEVICE_DB_ENTRIES 2
+#define NVM_NUM_DEVICE_DB_ENTRIES 2
 #define MAX_NR_SM_LOOKUP_ENTRIES 2
 #define MAX_NR_ALLOWLIST_ENTRIES 16
 #define MAX_NR_BLE_SERVICES 1
@@ -23,6 +31,7 @@
 #define MAX_NR_BLE_GATT_CLIENTS 1
 #define MAX_NR_BLUETOOTH_SMART_DEVICE_CONNECTIONS 1
 #define HCI_ACL_PAYLOAD_SIZE 1024
+#define HCI_ACL_CHUNK_SIZE_ALIGNMENT 4
 #define HCI_OUTGOING_PRE_BUFFER_SIZE 4
 #define MAX_NR_BTSTACK_LINK_KEYS 2
 #define MAX_NR_L2CAP_CHANNELS 1

@@ -1,4 +1,4 @@
-#include "bluetooth.h"
+#include "intercom_bluetooth.h"
 
 #if defined(PICO_INTERCOM_TARGET)
 #include "pico/cyw43_arch.h"

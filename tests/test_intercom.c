@@ -1,5 +1,5 @@
 #include "audio.h"
-#include "bluetooth.h"
+#include "intercom_bluetooth.h"
 #include "intercom.h"
 #include "intercom_protocol.h"
 #include "pairings.h"
