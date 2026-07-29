@@ -543,11 +543,14 @@ static void bluetooth_classic_backend_handle_can_send_now(bluetooth_classic_stac
         const bluetooth_classic_packet_t packet = stack->outbound_queue[index];
         bluetooth_classic_backend_peer_t *backend_peer =
             bluetooth_classic_backend_peer_by_id(packet.target_peer, false);
-        if (backend_peer == NULL || backend_peer->rfcomm_cid != rfcomm_cid) {
+        if (backend_peer == NULL) {
             bluetooth_classic_packet_t dropped_packet = {0};
             (void)bluetooth_classic_remove_outbound_at(stack, index, &dropped_packet);
             stack->transport.packets_dropped++;
             index--;
+            continue;
+        }
+        if (backend_peer->rfcomm_cid != rfcomm_cid) {
             continue;
         }
 
@@ -904,6 +907,7 @@ bool bluetooth_classic_stack_disconnect(bluetooth_classic_stack_t *stack, uint8_
     backend_peer->sdp_query_needed = false;
     if (backend_peer->rfcomm_cid != 0U) {
         (void)rfcomm_disconnect(backend_peer->rfcomm_cid);
+        return true;
     }
     bluetooth_classic_mark_disconnected(stack, peer_id);
     return true;
