@@ -530,14 +530,12 @@ static void bluetooth_classic_backend_handle_can_send_now(bluetooth_classic_stac
     bluetooth_classic_backend.pending_send_cid = 0U;
 
     for (size_t index = 0; index < stack->outbound_packet_count; ++index) {
-        bluetooth_classic_packet_t packet = {0};
-        if (!bluetooth_classic_remove_outbound_at(stack, index, &packet)) {
-            return;
-        }
-
+        const bluetooth_classic_packet_t packet = stack->outbound_queue[index];
         bluetooth_classic_backend_peer_t *backend_peer =
             bluetooth_classic_backend_peer_by_id(packet.target_peer, false);
         if (backend_peer == NULL || backend_peer->rfcomm_cid != rfcomm_cid) {
+            bluetooth_classic_packet_t dropped_packet = {0};
+            (void)bluetooth_classic_remove_outbound_at(stack, index, &dropped_packet);
             stack->transport.packets_dropped++;
             index--;
             continue;
@@ -549,6 +547,8 @@ static void bluetooth_classic_backend_handle_can_send_now(bluetooth_classic_stac
             return;
         }
 
+        bluetooth_classic_packet_t delivered_packet = {0};
+        (void)bluetooth_classic_remove_outbound_at(stack, index, &delivered_packet);
         stack->transport.packets_delivered++;
         stack->transport.last_source_peer = packet.source_peer;
         stack->transport.last_target_peer = packet.target_peer;
@@ -897,7 +897,6 @@ bool bluetooth_classic_stack_disconnect(bluetooth_classic_stack_t *stack, uint8_
     backend_peer->sdp_query_needed = false;
     if (backend_peer->rfcomm_cid != 0U) {
         (void)rfcomm_disconnect(backend_peer->rfcomm_cid);
-        backend_peer->rfcomm_cid = 0U;
     }
     bluetooth_classic_mark_disconnected(stack, peer_id);
     return true;
@@ -982,6 +981,7 @@ bool bluetooth_classic_stack_report_headset(bluetooth_classic_stack_t *stack, ui
     if (peer == NULL) {
         return false;
     }
+    const bool previous_audio_ready = peer->audio_ready;
     peer->audio_ready = audio_ready;
     peer->last_seen_ms = stack->transport.last_poll_ms;
     if (name != NULL && name[0] != '\0') {
@@ -994,9 +994,11 @@ bool bluetooth_classic_stack_report_headset(bluetooth_classic_stack_t *stack, ui
             backend_peer->sdp_query_needed = backend_peer->rfcomm_channel == 0U;
         }
     }
-    printf("Bluetooth Classic headset %u %s audio transport is %s.\n", (unsigned)peer_id,
-           name != NULL && name[0] != '\0' ? name : "peer",
-           audio_ready ? "ready" : "negotiating");
+    if (previous_audio_ready != audio_ready) {
+        printf("Bluetooth Classic headset %u %s audio transport is %s.\n", (unsigned)peer_id,
+               name != NULL && name[0] != '\0' ? name : "peer",
+               audio_ready ? "ready" : "negotiating");
+    }
     return true;
 #else
     const bool reported =
