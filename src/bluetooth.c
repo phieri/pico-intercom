@@ -480,6 +480,9 @@ static void bluetooth_mark_session_ready(bluetooth_runtime_t *runtime, bluetooth
     link->hello_sent = true;
     link->link_state = BLUETOOTH_LINK_STATE_READY;
     link->last_activity_ms = bluetooth_now_ms(runtime);
+    if (runtime->intercom != NULL) {
+        (void)intercom_add_peer(runtime->intercom, peer_id);
+    }
     bluetooth_refresh_session_ready_count(runtime);
     bluetooth_mark_pairing_completed(runtime, peer_id);
 }
@@ -523,15 +526,6 @@ static void bluetooth_reconcile_peer_links(bluetooth_runtime_t *runtime) {
         if (bluetooth_is_link_connected(runtime, link->peer_id)) {
             if (!link->session_active && link->link_state == BLUETOOTH_LINK_STATE_IDLE) {
                 link->link_state = BLUETOOTH_LINK_STATE_CONNECTING;
-            }
-            if (link->remembered && !link->session_active &&
-                link->link_state == BLUETOOTH_LINK_STATE_CONNECTING) {
-                if (runtime->intercom != NULL) {
-                    (void)intercom_add_peer(runtime->intercom, link->peer_id);
-                }
-                bluetooth_mark_session_ready(runtime, link, link->peer_id,
-                                             bluetooth_generate_session_id(runtime, link->peer_id));
-                runtime->successful_connections++;
             }
             continue;
         }
@@ -786,27 +780,6 @@ bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
     link->last_handshake_ms = 0U;
     runtime->last_error_code = BLUETOOTH_ERROR_NONE;
 
-    /* Keep the intercom relay peer list aligned with the transport link state on
-     * both host and target builds so relays are not left behind after connect or
-     * disconnect transitions. */
-    if (runtime->intercom != NULL && !intercom_add_peer(runtime->intercom, peer_id)) {
-        (void)bluetooth_classic_stack_disconnect(&runtime->classic_stack, peer_id);
-        runtime->failed_disconnections++;
-        bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_PEER_LIMIT);
-        return false;
-    }
-
-#if !defined(PICO_INTERCOM_TARGET)
-    if (!bluetooth_has_peer(runtime, peer_id) && runtime->connected_peer_count < INTERCOM_MAX_PEERS) {
-        const size_t peer_index = runtime->connected_peer_count++;
-        runtime->connected_peers[peer_index] = peer_id;
-        runtime->peer_states[peer_index] = BLUETOOTH_PEER_STATE_CONNECTED;
-    }
-    bluetooth_mark_session_ready(runtime, link, peer_id,
-                                 bluetooth_generate_session_id(runtime, peer_id));
-    runtime->successful_connections++;
-#endif
-
     bluetooth_sync_transport_counters(runtime);
     bluetooth_sync_connected_peers(runtime);
     return true;
@@ -1014,9 +987,6 @@ bool bluetooth_handle_pairing_button(bluetooth_runtime_t *runtime, uint8_t peer_
         return false;
     }
 
-#if !defined(PICO_INTERCOM_TARGET)
-    bluetooth_mark_pairing_completed(runtime, selected_peer_id);
-#endif
     bluetooth_sync_transport_counters(runtime);
     bluetooth_sync_connected_peers(runtime);
     return true;
@@ -1212,6 +1182,8 @@ void bluetooth_poll(bluetooth_runtime_t *runtime) {
     bluetooth_sync_connected_peers(runtime);
     bluetooth_reconcile_peer_links(runtime);
     bluetooth_service_protocol_links(runtime);
+    bluetooth_flush_classic_packets(runtime);
+    bluetooth_sync_transport_counters(runtime);
 
 #if defined(PICO_INTERCOM_TARGET)
     bluetooth_classic_packet_t packet = {0};

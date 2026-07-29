@@ -66,10 +66,14 @@ until the session handshake completes.
 - On boot, the firmware reloads remembered headset IDs and reconnects
   automatically when those headsets become available again.
 - Pairing is only persisted once the headset session is actually operational.
+- Secure Simple Pairing confirmations are accepted automatically, and legacy
+  pin-code requests use the common headset code `0000`.
 - Pairing, connection, transport, and session failures are reported over USB
   serial and reflected in runtime state.
 - Dead sessions are torn down and stale peers are removed from the active relay
   list so reconnects can establish a fresh session cleanly.
+- A remembered-peer reconnect follows the same discovery → SDP lookup → RFCOMM
+  reconnect → `HELLO`/`HELLO_ACK` session setup flow as a fresh link.
 
 ## Practical limitations
 
@@ -106,6 +110,14 @@ path before building:
 
 ```sh
 cmake -S . -B build-firmware -DPICO_BOARD=pico2_w -DPICO_SDK_PATH=$PWD/pico-sdk
+cmake --build build-firmware
+```
+
+If you do not already have a populated `pico-sdk/` checkout, you can let CMake
+fetch it during configure:
+
+```sh
+cmake -S . -B build-firmware -DPICO_BOARD=pico2_w -DPICO_SDK_FETCH_FROM_GIT=ON
 cmake --build build-firmware
 ```
 
