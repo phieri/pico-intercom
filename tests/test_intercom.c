@@ -367,6 +367,7 @@ int main(void) {
     assert(reconnect_stack.connected);
     assert(bluetooth_transport_is_connected(&reconnect_stack.transport, 7U));
     assert(bluetooth_classic_stack_disconnect(&reconnect_stack, 7U));
+    assert(bluetooth_classic_stack_report_headset(&reconnect_stack, 7U, "headset-7", true));
     assert(bluetooth_classic_stack_poll(&reconnect_stack));
     assert(bluetooth_transport_is_connected(&reconnect_stack.transport, 7U));
 
@@ -374,11 +375,11 @@ int main(void) {
     bluetooth_runtime_t limit_runtime = {0};
     intercom_init(&limit_state);
     bluetooth_init(&limit_runtime, &limit_state);
-    for (uint8_t peer_id = 1U; peer_id <= INTERCOM_MAX_PEERS; ++peer_id) {
+    for (uint8_t peer_id = 2U; peer_id < (uint8_t)(INTERCOM_MAX_PEERS + 2U); ++peer_id) {
         assert(bluetooth_connect_peer(&limit_runtime, peer_id));
     }
     assert(limit_runtime.connected_peer_count == INTERCOM_MAX_PEERS);
-    assert(!bluetooth_connect_peer(&limit_runtime, 9U));
+    assert(!bluetooth_connect_peer(&limit_runtime, 10U));
 
     bluetooth_runtime_t protocol_runtime = {0};
     intercom_state_t protocol_state;

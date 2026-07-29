@@ -293,6 +293,7 @@ bool bluetooth_transport_disconnect(bluetooth_transport_t *transport, uint8_t pe
     if (peer != NULL) {
         peer->paired = false;
         peer->pairing_pending = false;
+        peer->audio_ready = false;
         peer->last_disconnected_ms = transport->last_poll_ms;
         peer->reconnect_attempts++;
     }
