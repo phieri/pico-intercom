@@ -70,6 +70,8 @@ until the session handshake completes.
   pin-code requests use the common headset code `0000`.
 - Pairing, connection, transport, and session failures are reported over USB
   serial and reflected in runtime state.
+- Explicit disconnect requests suppress automatic reconnect until the headset is
+  paired or connected again deliberately.
 - Dead sessions are torn down and stale peers are removed from the active relay
   list so reconnects can establish a fresh session cleanly.
 - A remembered-peer reconnect follows the same discovery → SDP lookup → RFCOMM

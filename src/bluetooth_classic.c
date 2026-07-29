@@ -262,14 +262,13 @@ static void bluetooth_classic_mark_disconnected(bluetooth_classic_stack_t *stack
     bluetooth_transport_peer_info_t *peer = bluetooth_classic_get_peer(stack, peer_id, false);
     if (peer != NULL) {
         peer->pairing_pending = false;
-        peer->disconnect_requested = false;
         peer->paired = bluetooth_classic_peer_is_remembered(stack, peer_id);
-        peer->audio_ready = false;
         peer->last_disconnected_ms = stack->transport.last_poll_ms;
         peer->last_state_change_ms = stack->transport.last_poll_ms;
         peer->reconnect_attempts++;
     }
 
+    (void)bluetooth_classic_drop_outbound_for_peer(stack, peer_id);
     if (stack->paired_peer_id == peer_id) {
         stack->paired_peer_id = 0U;
     }
@@ -316,6 +315,30 @@ static bool bluetooth_classic_remove_outbound_at(bluetooth_classic_stack_t *stac
     }
     stack->outbound_packet_count--;
     return true;
+}
+
+static size_t bluetooth_classic_drop_outbound_for_peer(bluetooth_classic_stack_t *stack,
+                                                       uint8_t peer_id) {
+    if (stack == NULL || peer_id == 0U) {
+        return 0U;
+    }
+
+    size_t removed = 0U;
+    size_t index = 0U;
+    while (index < stack->outbound_packet_count) {
+        if (stack->outbound_queue[index].target_peer != peer_id &&
+            stack->outbound_queue[index].source_peer != peer_id) {
+            index++;
+            continue;
+        }
+
+        bluetooth_classic_packet_t dropped_packet = {0};
+        (void)bluetooth_classic_remove_outbound_at(stack, index, &dropped_packet);
+        removed++;
+    }
+
+    stack->transport.packets_dropped += removed;
+    return removed;
 }
 
 #if defined(PICO_INTERCOM_TARGET)
@@ -664,9 +687,27 @@ static void bluetooth_classic_backend_handle_can_send_now(bluetooth_classic_stac
             continue;
         }
 
+        if (backend_peer->rfcomm_mtu != 0U && packet.payload_len > backend_peer->rfcomm_mtu) {
+            printf("Bluetooth Classic dropping oversized packet for peer %u (%u > mtu %u).\n",
+                   (unsigned)packet.target_peer, (unsigned)packet.payload_len,
+                   (unsigned)backend_peer->rfcomm_mtu);
+            bluetooth_classic_packet_t dropped_packet = {0};
+            (void)bluetooth_classic_remove_outbound_at(stack, index, &dropped_packet);
+            stack->transport.packets_dropped++;
+            if (stack->outbound_packet_count > 0U) {
+                bluetooth_classic_backend_maybe_request_send_now(stack);
+            }
+            return;
+        }
+
         if (rfcomm_send(rfcomm_cid, (uint8_t *)packet.payload, (uint16_t)packet.payload_len) !=
             ERROR_CODE_SUCCESS) {
-            stack->transport.packets_dropped++;
+            printf("Bluetooth Classic RFCOMM send failed for peer %u; resetting channel.\n",
+                   (unsigned)packet.target_peer);
+            stack->transport.error = true;
+            (void)bluetooth_classic_drop_outbound_for_peer(stack, packet.target_peer);
+            bluetooth_classic_mark_disconnecting(stack, packet.target_peer);
+            (void)rfcomm_disconnect(rfcomm_cid);
             return;
         }
 
@@ -801,12 +842,23 @@ static void bluetooth_classic_backend_packet_handler(uint8_t packet_type, uint16
             if (backend_peer == NULL) {
                 break;
             }
+            bluetooth_transport_peer_info_t *peer =
+                bluetooth_classic_get_peer(stack, backend_peer->peer_id, false);
+            const bool peer_requested_disconnect =
+                peer != NULL ? peer->disconnect_requested : false;
+            const bool reconnect_requested =
+                !peer_requested_disconnect &&
+                (bluetooth_classic_peer_is_remembered(stack, backend_peer->peer_id) ||
+                 (peer != NULL && peer->pairing_pending));
             bluetooth_classic_mark_disconnected(stack, backend_peer->peer_id);
+            if (peer != NULL) {
+                peer->audio_ready = backend_peer->rfcomm_channel != 0U;
+            }
             backend_peer->rfcomm_cid = 0U;
             backend_peer->rfcomm_mtu = 0U;
-            backend_peer->connect_requested = bluetooth_classic_peer_is_remembered(stack,
-                                                                                   backend_peer->peer_id);
-            backend_peer->sdp_query_needed = backend_peer->connect_requested;
+            backend_peer->connect_requested = reconnect_requested;
+            backend_peer->sdp_query_needed =
+                reconnect_requested && backend_peer->rfcomm_channel == 0U;
             printf("Bluetooth Classic RFCOMM channel closed for peer %u.\n",
                    (unsigned)backend_peer->peer_id);
             break;

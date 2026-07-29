@@ -181,6 +181,32 @@ static void bluetooth_transport_purge_stale_peer(bluetooth_transport_t *transpor
     }
 }
 
+static size_t bluetooth_transport_drop_peer_packets(bluetooth_transport_t *transport,
+                                                    uint8_t peer_id) {
+    if (transport == NULL || peer_id == 0U) {
+        return 0U;
+    }
+
+    size_t removed = 0U;
+    size_t index = 0U;
+    while (index < transport->queued_packet_count) {
+        const bluetooth_transport_packet_t *packet = &transport->queue[index];
+        if (packet->source_peer != peer_id && packet->target_peer != peer_id) {
+            index++;
+            continue;
+        }
+
+        for (size_t shift = index + 1U; shift < transport->queued_packet_count; ++shift) {
+            transport->queue[shift - 1U] = transport->queue[shift];
+        }
+        transport->queued_packet_count--;
+        removed++;
+    }
+
+    transport->packets_dropped += removed;
+    return removed;
+}
+
 void bluetooth_transport_init(bluetooth_transport_t *transport) {
     if (transport == NULL) {
         return;
@@ -262,6 +288,7 @@ bool bluetooth_transport_connect(bluetooth_transport_t *transport, uint8_t peer_
     }
 
     peer->pairing_pending = true;
+    peer->disconnect_requested = false;
     transport->pending_pair_peer_id = peer_id;
     bluetooth_transport_mark_connected(transport, peer);
     return bluetooth_transport_has_peer(transport, peer_id);
@@ -293,13 +320,14 @@ bool bluetooth_transport_disconnect(bluetooth_transport_t *transport, uint8_t pe
     bluetooth_transport_peer_info_t *peer =
         bluetooth_transport_get_discovered_peer(transport, peer_id, false);
     if (peer != NULL) {
-        peer->paired = false;
+        peer->paired = bluetooth_transport_peer_is_remembered(transport, peer_id);
         peer->pairing_pending = false;
-        peer->audio_ready = false;
+        peer->disconnect_requested = true;
         peer->last_disconnected_ms = transport->last_poll_ms;
         peer->reconnect_attempts++;
     }
 
+    (void)bluetooth_transport_drop_peer_packets(transport, peer_id);
     transport->pending_pair_peer_id = 0U;
     transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_NONE;
     return true;
@@ -318,6 +346,10 @@ bool bluetooth_transport_restore_pairing(bluetooth_transport_t *transport, uint8
         bluetooth_transport_get_discovered_peer(transport, peer_id, true);
     if (peer != NULL && peer->name[0] == '\0') {
         bluetooth_transport_make_peer_name(peer->name, sizeof(peer->name), peer_id);
+    }
+    if (peer != NULL) {
+        peer->paired = true;
+        peer->disconnect_requested = false;
     }
 
     transport->last_error_code = BLUETOOTH_TRANSPORT_ERROR_NONE;
@@ -378,7 +410,7 @@ bool bluetooth_transport_poll(bluetooth_transport_t *transport) {
 
         if (!bluetooth_transport_peer_is_remembered(transport, peer->peer_id) ||
             bluetooth_transport_has_peer(transport, peer->peer_id) ||
-            !bluetooth_transport_peer_ready_for_audio(peer)) {
+            !bluetooth_transport_peer_ready_for_audio(peer) || peer->disconnect_requested) {
             continue;
         }
 
