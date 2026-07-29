@@ -64,7 +64,7 @@ void intercom_audio_init(intercom_audio_subsystem_t *audio) {
 
 #if defined(PICO_INTERCOM_TARGET)
     (void)fprintf(stderr,
-                  "Audio backend uses software-generated PCM frames; no direct ADC/PWM audio hardware is required.\n");
+                  "Audio backend relays encoded headset frames only; the Pico does not use direct analog audio hardware.\n");
 #endif
 }
 

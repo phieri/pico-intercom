@@ -33,6 +33,8 @@ bool bluetooth_classic_stack_connect(bluetooth_classic_stack_t *stack, uint8_t p
 bool bluetooth_classic_stack_disconnect(bluetooth_classic_stack_t *stack, uint8_t peer_id);
 bool bluetooth_classic_stack_restore_pairing(bluetooth_classic_stack_t *stack, uint8_t peer_id);
 bool bluetooth_classic_stack_poll(bluetooth_classic_stack_t *stack);
+bool bluetooth_classic_stack_report_headset(bluetooth_classic_stack_t *stack, uint8_t peer_id,
+                                            const char *name, bool audio_ready);
 bool bluetooth_classic_stack_select_pairing_candidate(const bluetooth_classic_stack_t *stack,
                                                       uint8_t *peer_id);
 bool bluetooth_classic_stack_queue_packet(bluetooth_classic_stack_t *stack, uint8_t source_peer,

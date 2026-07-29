@@ -336,6 +336,7 @@ int main(void) {
 
     bluetooth_classic_stack_t classic_stack = {0};
     bluetooth_classic_stack_init(&classic_stack);
+    assert(bluetooth_classic_stack_report_headset(&classic_stack, 5U, "headset-5", true));
     assert(bluetooth_classic_stack_pair(&classic_stack, 5U));
     assert(bluetooth_classic_stack_queue_packet(&classic_stack, 1U, 5U, payload, sizeof(payload)));
     assert(bluetooth_classic_stack_pending_count(&classic_stack) == 1U);
@@ -345,6 +346,29 @@ int main(void) {
     assert(classic_packet.payload_len == sizeof(payload));
     assert(classic_packet.source_peer == 1U);
     assert(bluetooth_classic_stack_pending_count(&classic_stack) == 0U);
+    for (size_t index = 0; index < BLUETOOTH_TRANSPORT_QUEUE_DEPTH; ++index) {
+        assert(bluetooth_classic_stack_queue_packet(&classic_stack, 1U, 5U, payload,
+                                                    sizeof(payload)));
+    }
+    assert(!bluetooth_classic_stack_queue_packet(&classic_stack, 1U, 5U, payload, sizeof(payload)));
+    assert(classic_stack.transport.packets_dropped == 1U);
+    while (bluetooth_classic_stack_dequeue_packet(&classic_stack, &classic_packet)) {
+    }
+    assert(bluetooth_classic_stack_pending_count(&classic_stack) == 0U);
+
+    bluetooth_classic_stack_t reconnect_stack = {0};
+    bluetooth_classic_stack_init(&reconnect_stack);
+    assert(bluetooth_classic_stack_restore_pairing(&reconnect_stack, 7U));
+    assert(bluetooth_classic_stack_report_headset(&reconnect_stack, 7U, "headset-7", false));
+    uint8_t candidate_peer_id = 0U;
+    assert(!bluetooth_classic_stack_select_pairing_candidate(&reconnect_stack, &candidate_peer_id));
+    assert(bluetooth_classic_stack_report_headset(&reconnect_stack, 7U, "headset-7", true));
+    assert(bluetooth_classic_stack_poll(&reconnect_stack));
+    assert(reconnect_stack.connected);
+    assert(bluetooth_transport_is_connected(&reconnect_stack.transport, 7U));
+    assert(bluetooth_classic_stack_disconnect(&reconnect_stack, 7U));
+    assert(bluetooth_classic_stack_poll(&reconnect_stack));
+    assert(bluetooth_transport_is_connected(&reconnect_stack.transport, 7U));
 
     intercom_state_t limit_state;
     bluetooth_runtime_t limit_runtime = {0};
@@ -384,6 +408,14 @@ int main(void) {
                                                protocol_packet, inbound_packet_len));
     assert(protocol_runtime.packets_received == protocol_received);
     assert(protocol_runtime.protocol_messages_dropped == dropped_before_duplicate + 1U);
+    size_t out_of_order_len = 0U;
+    assert(encode_protocol_message(protocol_packet, sizeof(protocol_packet),
+                                   INTERCOM_PROTOCOL_MESSAGE_AUDIO, protocol_link->session_id,
+                                   1U, TEST_PROTOCOL_RUNTIME_PEER_ID, protocol_runtime.local_peer_id,
+                                   inbound_audio, (uint16_t)inbound_audio_len,
+                                   &out_of_order_len));
+    assert(!bluetooth_handle_transport_payload(&protocol_runtime, TEST_PROTOCOL_RUNTIME_PEER_ID,
+                                               protocol_packet, out_of_order_len));
     size_t wrong_target_len = 0U;
     assert(encode_protocol_message(protocol_packet, sizeof(protocol_packet),
                                    INTERCOM_PROTOCOL_MESSAGE_AUDIO, protocol_link->session_id,
@@ -439,6 +471,11 @@ int main(void) {
     }
     assert(!bluetooth_runtime_is_operational(&timeout_runtime));
     assert(timeout_runtime.intercom->peer_count == 0U);
+    assert(bluetooth_classic_stack_report_headset(&timeout_runtime.classic_stack,
+                                                  TEST_TIMEOUT_RUNTIME_PEER_ID, "headset-7", true));
+    bluetooth_poll(&timeout_runtime);
+    assert(bluetooth_runtime_is_operational(&timeout_runtime));
+    assert(timeout_runtime.intercom->peer_count == 1U);
 
     pairing_store_t store = {0};
     pairing_t persisted[8] = {{0}};
