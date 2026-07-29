@@ -42,6 +42,7 @@ typedef struct {
     bool pairing_pending;
     bool audio_ready;
     bool disconnect_requested;
+    bool reconnect_blocked;
     uint8_t peer_id;
     uint8_t address[6];
     uint8_t address_type;

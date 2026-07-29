@@ -402,9 +402,15 @@ int main(void) {
     assert(bluetooth_classic_stack_poll(&reconnect_stack));
     assert(reconnect_stack.connected);
     assert(bluetooth_transport_is_connected(&reconnect_stack.transport, 7U));
+    assert(bluetooth_classic_stack_queue_packet(&reconnect_stack, 1U, 7U, payload, sizeof(payload)));
+    assert(bluetooth_classic_stack_pending_count(&reconnect_stack) == 1U);
     assert(bluetooth_classic_stack_disconnect(&reconnect_stack, 7U));
+    assert(reconnect_stack.transport.packets_dropped >= 1U);
+    assert(bluetooth_classic_stack_pending_count(&reconnect_stack) == 0U);
     assert(bluetooth_classic_stack_report_headset(&reconnect_stack, 7U, "headset-7", true));
     assert(bluetooth_classic_stack_poll(&reconnect_stack));
+    assert(!bluetooth_transport_is_connected(&reconnect_stack.transport, 7U));
+    assert(bluetooth_classic_stack_connect(&reconnect_stack, 7U));
     assert(bluetooth_transport_is_connected(&reconnect_stack.transport, 7U));
 
     intercom_state_t limit_state;
