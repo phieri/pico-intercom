@@ -10,7 +10,7 @@ intercom frames, pairing state, and session control.
 
 ## Chosen wireless backend
 
-- **Transport:** Bluetooth Classic headset transport over the Pico SDK BTstack integration
+- **Transport:** Bluetooth Classic RFCOMM transport over the Pico SDK BTstack integration
 - **Board:** Raspberry Pi Pico 2 W
 - **SDK support used:** `pico_btstack_classic`, `pico_btstack_cyw43`, `pico_cyw43_arch_none`
 - **Audio model:** encoded intercom frames are exchanged with paired headsets and relayed across application sessions
@@ -22,7 +22,7 @@ Wi-Fi is not used by this project.
 On hardware, the firmware:
 
 1. boots and reports startup state over USB serial
-2. initializes CYW43 and the Bluetooth Classic controller path
+2. initializes CYW43, BTstack Classic, inquiry, SDP, and RFCOMM controller transport
 3. derives a stable local peer ID from the Pico unique board ID
 4. restores remembered headset pairings from persistent storage
 5. reconnects automatically when a remembered headset becomes available again
@@ -31,7 +31,7 @@ On hardware, the firmware:
 8. keeps the active intercom peer list in sync as sessions connect and disconnect
 9. lets the onboard pairing button request pairing with a selected headset peer
 10. only reports the intercom path as operational once a session is established
-11. relays encoded intercom audio frames over the active Bluetooth Classic headset session while keepalives are healthy
+11. relays encoded intercom audio frames over the active Bluetooth Classic RFCOMM headset session while keepalives are healthy
 
 ## Audio architecture
 
@@ -46,7 +46,7 @@ On hardware, the firmware:
 ## Intercom protocol
 
 Runtime traffic is wrapped in a small application protocol carried inside the
-Bluetooth Classic headset transport.
+Bluetooth Classic RFCOMM headset transport.
 
 - `HELLO`: announces peer identity and starts or resets a session
 - `HELLO_ACK`: confirms that the remote peer accepted the session
@@ -100,8 +100,9 @@ ctest --test-dir build --output-on-failure
 
 ### Firmware build
 
-The Pico SDK checkout must include BTstack support. Configure the firmware build
-with a valid SDK path before building:
+The Pico SDK checkout must include BTstack support, including the
+`pico-sdk/lib/btstack` submodule. Configure the firmware build with a valid SDK
+path before building:
 
 ```sh
 cmake -S . -B build-firmware -DPICO_BOARD=pico2_w -DPICO_SDK_PATH=$PWD/pico-sdk

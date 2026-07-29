@@ -22,6 +22,8 @@ typedef struct {
     bool connected;
     uint8_t paired_peer_id;
     bluetooth_classic_transport_t transport;
+    bluetooth_classic_packet_t outbound_queue[BLUETOOTH_TRANSPORT_QUEUE_DEPTH];
+    size_t outbound_packet_count;
 } bluetooth_classic_stack_t;
 
 void bluetooth_classic_stack_init(bluetooth_classic_stack_t *stack);
