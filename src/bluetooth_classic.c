@@ -768,9 +768,9 @@ bool bluetooth_classic_stack_set_enabled(bluetooth_classic_stack_t *stack, bool 
     stack->enabled = enabled;
     stack->discoverable = enabled;
     stack->pairing_enabled = enabled;
-    (void)bluetooth_transport_set_enabled(&stack->transport, enabled);
 
 #if defined(PICO_INTERCOM_TARGET)
+    (void)bluetooth_transport_set_enabled(&stack->transport, enabled);
     if (enabled) {
         if (!bluetooth_classic_backend_init(stack)) {
             return false;
