@@ -9,6 +9,10 @@
 #define ENABLE_BLE 1
 #define ENABLE_CLASSIC 0
 
+/* Use malloc-backed buffers so BTstack can grow its ATT database as needed. */
+#define HAVE_MALLOC 1
+#define MAX_ATT_DB_SIZE 512
+
 #define MAX_NR_GATT_CLIENTS 1
 #define MAX_NR_HCI_CONNECTIONS 1
 #define MAX_NR_LE_DEVICE_DB_ENTRIES 2
