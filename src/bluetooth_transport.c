@@ -283,7 +283,9 @@ bool bluetooth_transport_disconnect(bluetooth_transport_t *transport, uint8_t pe
         transport->connected_peers[shift - 1U] = transport->connected_peers[shift];
         transport->peer_states[shift - 1U] = transport->peer_states[shift];
     }
-    transport->connected_peer_count--;
+    if (transport->connected_peer_count > 0U) {
+        transport->connected_peer_count--;
+    }
     transport->connected_peers[transport->connected_peer_count] = 0U;
     transport->peer_states[transport->connected_peer_count] =
         BLUETOOTH_TRANSPORT_STATE_DISCONNECTED;
@@ -367,7 +369,8 @@ bool bluetooth_transport_poll(bluetooth_transport_t *transport) {
             continue;
         }
 
-        if ((transport->last_poll_ms - peer->last_seen_ms) >
+        if (transport->last_poll_ms >= peer->last_seen_ms &&
+            (transport->last_poll_ms - peer->last_seen_ms) >
             BLUETOOTH_TRANSPORT_DISCOVERY_TIMEOUT_MS) {
             bluetooth_transport_purge_stale_peer(transport, index);
             continue;

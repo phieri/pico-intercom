@@ -74,6 +74,11 @@ static bool bluetooth_sequence_is_newer(uint16_t sequence, uint16_t previous_seq
     return delta != 0U && delta < 0x8000U;
 }
 
+static bool bluetooth_sequence_is_stale(uint16_t sequence, uint16_t previous_sequence) {
+    const uint16_t delta = (uint16_t)(previous_sequence - sequence);
+    return delta != 0U && delta < 0x8000U;
+}
+
 static bool bluetooth_runtime_is_ready(const bluetooth_runtime_t *runtime) {
     return runtime != NULL && runtime->initialized;
 }
@@ -1109,7 +1114,8 @@ bool bluetooth_handle_transport_payload(bluetooth_runtime_t *runtime, uint8_t so
     if (bluetooth_sequence_is_newer(message.sequence, link->last_rx_sequence)) {
         link->last_rx_sequence = message.sequence;
     } else if (message.sequence == link->last_rx_sequence ||
-               message.message_type == INTERCOM_PROTOCOL_MESSAGE_AUDIO) {
+               (message.message_type == INTERCOM_PROTOCOL_MESSAGE_AUDIO &&
+                bluetooth_sequence_is_stale(message.sequence, link->last_rx_sequence))) {
         link->dropped_messages++;
         runtime->protocol_messages_dropped++;
         return false;
