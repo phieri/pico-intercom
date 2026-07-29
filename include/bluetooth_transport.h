@@ -15,6 +15,8 @@ extern "C" {
 #define BLUETOOTH_TRANSPORT_QUEUE_DEPTH (INTERCOM_MAX_PEERS * 2U)
 #define BLUETOOTH_TRANSPORT_PEER_NAME_LEN 32U
 #define BLUETOOTH_TRANSPORT_DISCOVERY_TIMEOUT_MS 5000U
+#define BLUETOOTH_TRANSPORT_SDP_RETRY_MS 1000U
+#define BLUETOOTH_TRANSPORT_CONNECT_RETRY_MS 1000U
 
 typedef enum {
     BLUETOOTH_TRANSPORT_MEDIUM_CLASSIC_HEADSET = 0
@@ -39,12 +41,18 @@ typedef struct {
     bool paired;
     bool pairing_pending;
     bool audio_ready;
+    bool disconnect_requested;
     uint8_t peer_id;
     uint8_t address[6];
     uint8_t address_type;
+    uint8_t sdp_query_attempts;
+    uint8_t connect_attempts;
     uint32_t last_seen_ms;
     uint32_t last_connected_ms;
     uint32_t last_disconnected_ms;
+    uint32_t last_state_change_ms;
+    uint32_t last_sdp_query_ms;
+    uint32_t last_connect_attempt_ms;
     uint16_t reconnect_attempts;
     char name[BLUETOOTH_TRANSPORT_PEER_NAME_LEN];
 } bluetooth_transport_peer_info_t;
