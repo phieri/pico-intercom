@@ -6,6 +6,7 @@
 #if defined(PICO_INTERCOM_TARGET)
 #include "btstack.h"
 #include "classic/sdp_client_rfcomm.h"
+#include "pico/cyw43_arch.h"
 #include "pico/stdlib.h"
 #endif
 
@@ -964,6 +965,11 @@ bool bluetooth_classic_stack_poll(bluetooth_classic_stack_t *stack) {
 
 #if defined(PICO_INTERCOM_TARGET)
     bluetooth_classic_active_stack = stack;
+    /* Drive the CYW43 driver and BTstack run loop so that HCI events,
+     * RFCOMM channel changes, SDP results, and inbound data packets are
+     * dispatched to bluetooth_classic_backend_packet_handler before the
+     * backend state machine runs its reconnect and send-request logic. */
+    cyw43_arch_poll();
     bluetooth_classic_backend_maybe_autoreconnect(stack);
     bluetooth_classic_backend_maybe_start_sdp_query();
     bluetooth_classic_backend_maybe_start_connect();
