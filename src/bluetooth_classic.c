@@ -280,6 +280,16 @@ typedef struct {
 static bluetooth_classic_backend_state_t bluetooth_classic_backend;
 static bluetooth_classic_stack_t *bluetooth_classic_active_stack = NULL;
 
+static void bluetooth_classic_backend_set_local_name(void) {
+    bd_addr_t local_address;
+    char local_name[40];
+
+    gap_local_bd_addr(local_address);
+    (void)snprintf(local_name, sizeof(local_name), "Pico Intercom %s",
+                   bd_addr_to_str(local_address));
+    gap_set_local_name(local_name);
+}
+
 static uint8_t bluetooth_classic_peer_id_from_address(const bd_addr_t address) {
     uint8_t crc = 0U;
     for (size_t index = 0; index < 6U; ++index) {
@@ -582,9 +592,6 @@ static void bluetooth_classic_backend_packet_handler(uint8_t packet_type, uint16
             }
             break;
         case GAP_EVENT_INQUIRY_RESULT:
-        case HCI_EVENT_INQUIRY_RESULT:
-        case HCI_EVENT_INQUIRY_RESULT_WITH_RSSI:
-        case HCI_EVENT_EXTENDED_INQUIRY_RESPONSE:
             gap_event_inquiry_result_get_bd_addr(packet, event_addr);
             if (memcmp(event_addr, (bd_addr_t){0}, sizeof(event_addr)) == 0) {
                 break;
@@ -732,7 +739,7 @@ static bool bluetooth_classic_backend_init(bluetooth_classic_stack_t *stack) {
         hci_add_event_handler(&bluetooth_classic_backend.event_registration);
         gap_set_class_of_device(BLUETOOTH_CLASSIC_DEVICE_CLASS);
         gap_ssp_set_io_capability(SSP_IO_CAPABILITY_DISPLAY_YES_NO);
-        gap_set_local_name("Pico Intercom 00:00:00:00:00:00");
+        bluetooth_classic_backend_set_local_name();
         bluetooth_classic_backend.initialized = true;
         bluetooth_classic_backend.service_registered = true;
     }
