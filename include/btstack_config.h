@@ -11,7 +11,6 @@
 
 /* Use malloc-backed buffers so BTstack can grow its classic control structures as needed. */
 #define HAVE_MALLOC 1
-#define MAX_ATT_DB_SIZE 512
 
 #define MAX_NR_HCI_CONNECTIONS 1
 #define MAX_NR_ALLOWLIST_ENTRIES 16

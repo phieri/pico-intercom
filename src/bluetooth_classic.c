@@ -3,8 +3,20 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(PICO_INTERCOM_TARGET)
+#include "pico/stdlib.h"
+#endif
+
 static bool bluetooth_classic_stack_is_ready(const bluetooth_classic_stack_t *stack) {
     return stack != NULL && stack->initialized;
+}
+
+static uint32_t bluetooth_classic_now_ms(void) {
+#if defined(PICO_INTERCOM_TARGET)
+    return to_ms_since_boot(get_absolute_time());
+#else
+    return 0U;
+#endif
 }
 
 static void bluetooth_classic_set_transport_online(bluetooth_classic_stack_t *stack, bool enabled) {
@@ -116,7 +128,12 @@ bool bluetooth_classic_stack_poll(bluetooth_classic_stack_t *stack) {
         return false;
     }
 
-    stack->transport.last_poll_ms += 100U;
+    stack->transport.last_poll_ms =
+#if defined(PICO_INTERCOM_TARGET)
+        bluetooth_classic_now_ms();
+#else
+        stack->transport.last_poll_ms + 100U;
+#endif
     const bool polled = bluetooth_transport_poll(&stack->transport);
     stack->connected = stack->transport.connected_peer_count > 0U;
     return polled;
