@@ -59,6 +59,8 @@ if(PICO_INTERCOM_FORCE_HOST_BUILD)
 else()
     if(NOT DEFINED PICO_BOARD OR PICO_BOARD STREQUAL "")
         set(PICO_BOARD pico2_w CACHE STRING "Board type" FORCE)
+    elseif(NOT PICO_BOARD STREQUAL "pico2_w")
+        message(FATAL_ERROR "pico-intercom only supports the Raspberry Pi Pico 2 W (PICO_BOARD=pico2_w).")
     endif()
 
     add_executable(pico_intercom src/main.c)
