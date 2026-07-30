@@ -93,8 +93,14 @@ until the session handshake completes.
 
 - Raspberry Pi Pico 2 W only
 - USB cable for flashing and serial logs
+- a Pico SDK 2.3.0 checkout with the `lib/btstack` submodule and CYW43 driver
+  firmware content available to the build
 - The firmware build is configured for Pico 2 W only; Pico W is not supported
 - one or more Bluetooth Classic headsets compatible with the intended deployment
+- keep GPIO 20, 23, 24, 25, and 29 free for the onboard CYW43 wireless device
+- if you override `PICO_INTERCOM_STATUS_LED_PIN`, choose a GPIO that is not used
+  by CYW43; by default the firmware uses the onboard wireless LED via
+  `cyw43_arch_gpio_put(...)` when available
 
 ## Build and test
 
@@ -129,6 +135,10 @@ cmake --build build-firmware
 
 The build produces a UF2 image for the Pico 2 W.
 
+The firmware enables BTstack RFCOMM SDP client discovery in `btstack_config.h`
+because reconnect and remote service lookup depend on
+`sdp_client_query_rfcomm_channel_and_name_for_uuid(...)`.
+
 ## Flashing
 
 1. Hold **BOOTSEL** while connecting the Pico 2 W over USB.
@@ -141,10 +151,13 @@ The build produces a UF2 image for the Pico 2 W.
 1. Flash the firmware to the Pico 2 W.
 2. Open the USB serial console.
 3. Wait for the Pico to report its local Bluetooth peer ID and controller status.
-4. Restore remembered headsets automatically on boot, or press the onboard
+4. If the transport stays unavailable for more than 10 seconds, treat that as a
+   startup fault and verify the Pico SDK checkout, BTstack submodule, and CYW43
+   firmware support before retrying.
+5. Restore remembered headsets automatically on boot, or press the onboard
    pairing button to start pairing a headset peer.
-5. Wait for session handshake completion before treating the link as operational.
-6. Confirm that the serial log reports at least one ready session before
+6. Wait for session handshake completion before treating the link as operational.
+7. Confirm that the serial log reports at least one ready session before
    expecting audio relay traffic.
 
 If the radio drops, the session times out, or the headset resets, the runtime

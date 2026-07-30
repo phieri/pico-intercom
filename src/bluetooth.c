@@ -698,6 +698,9 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
         !bluetooth_classic_stack_set_enabled(&runtime->classic_stack, runtime->enabled)) {
         runtime->platform_error = true;
         runtime->enabled = false;
+        runtime->advertising = false;
+        runtime->scanning = false;
+        runtime->last_error_code = BLUETOOTH_ERROR_NOT_READY;
     }
     runtime->last_status_ms = 0U;
     bluetooth_sync_transport_counters(runtime);

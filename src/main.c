@@ -2,6 +2,7 @@
 #include "pairings.h"
 
 #ifdef PICO_INTERCOM_TARGET
+#include "pico/cyw43_arch.h"
 #include "pico/stdlib.h"
 #endif
 
@@ -16,11 +17,14 @@
 #endif
 
 #ifndef PICO_INTERCOM_STATUS_LED_PIN
-#if defined(PICO_DEFAULT_LED_PIN)
-#define PICO_INTERCOM_STATUS_LED_PIN PICO_DEFAULT_LED_PIN
+#if defined(CYW43_WL_GPIO_LED_PIN)
+#define PICO_INTERCOM_USE_CYW43_STATUS_LED 1
 #else
-#define PICO_INTERCOM_STATUS_LED_PIN 25U
+#define PICO_INTERCOM_USE_CYW43_STATUS_LED 0
+#define PICO_INTERCOM_STATUS_LED_PIN 15U
 #endif
+#else
+#define PICO_INTERCOM_USE_CYW43_STATUS_LED 0
 #endif
 
 #ifndef PICO_INTERCOM_PAIR_BUTTON_POLL_MS
@@ -37,6 +41,10 @@
 
 #ifndef PICO_INTERCOM_AUDIO_POLL_MS
 #define PICO_INTERCOM_AUDIO_POLL_MS 100U
+#endif
+
+#ifndef PICO_INTERCOM_TRANSPORT_STARTUP_TIMEOUT_MS
+#define PICO_INTERCOM_TRANSPORT_STARTUP_TIMEOUT_MS 10000U
 #endif
 
 #ifndef PICO_INTERCOM_LOCAL_PEER_ID
@@ -67,36 +75,50 @@ static void init_pairing_button(void) {
     gpio_pull_up(PICO_INTERCOM_PAIR_BUTTON_PIN);
 }
 
+static void status_led_write(const bluetooth_runtime_t *bluetooth, bool enabled) {
+#if PICO_INTERCOM_USE_CYW43_STATUS_LED
+    if (bluetooth != NULL && bluetooth->platform_initialized && !bluetooth->platform_error) {
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, enabled ? 1 : 0);
+    }
+#else
+    (void)bluetooth;
+    gpio_put(PICO_INTERCOM_STATUS_LED_PIN, enabled ? 1 : 0);
+#endif
+}
+
 static void init_status_led(void) {
+#if !PICO_INTERCOM_USE_CYW43_STATUS_LED
     gpio_init(PICO_INTERCOM_STATUS_LED_PIN);
     gpio_set_dir(PICO_INTERCOM_STATUS_LED_PIN, GPIO_OUT);
     gpio_put(PICO_INTERCOM_STATUS_LED_PIN, 0);
+#endif
 }
 
 static void update_status_led(const bluetooth_runtime_t *bluetooth, bool pairing_in_progress,
-                              bool pairing_error, uint32_t now_ms) {
+                              bool pairing_error, bool transport_warning, uint32_t now_ms) {
     if (bluetooth == NULL || !bluetooth_runtime_has_transport(bluetooth)) {
-        gpio_put(PICO_INTERCOM_STATUS_LED_PIN, 0);
+        status_led_write(bluetooth, false);
         return;
     }
 
-    const bool runtime_error = pairing_error || bluetooth->storage_error;
+    const bool runtime_error =
+        pairing_error || transport_warning || bluetooth->storage_error || bluetooth->platform_error;
     if (runtime_error) {
-        gpio_put(PICO_INTERCOM_STATUS_LED_PIN, (now_ms / 250U) & 1U);
+        status_led_write(bluetooth, ((now_ms / 250U) & 1U) != 0U);
         return;
     }
 
     if (pairing_in_progress) {
-        gpio_put(PICO_INTERCOM_STATUS_LED_PIN, (now_ms / 100U) & 1U);
+        status_led_write(bluetooth, ((now_ms / 100U) & 1U) != 0U);
         return;
     }
 
     if (bluetooth->connected_peer_count > 0U) {
-        gpio_put(PICO_INTERCOM_STATUS_LED_PIN, 1);
+        status_led_write(bluetooth, true);
         return;
     }
 
-    gpio_put(PICO_INTERCOM_STATUS_LED_PIN, (now_ms / 1000U) & 1U);
+    status_led_write(bluetooth, ((now_ms / 1000U) & 1U) != 0U);
 }
 #endif
 
@@ -121,6 +143,7 @@ int main(void) {
     uint32_t last_reported_error = 0U;
     uint32_t last_status_report_ms = 0U;
     bool have_reported_status = false;
+    bool transport_warning = false;
 
     intercom_init(&intercom);
     intercom_enable(&intercom, true);
@@ -162,6 +185,16 @@ int main(void) {
         const bool pairing_button_pressed = !gpio_get(PICO_INTERCOM_PAIR_BUTTON_PIN);
         const uint32_t now_ms = to_ms_since_boot(get_absolute_time());
         bluetooth_poll(&bluetooth);
+        if (!bluetooth_runtime_has_transport(&bluetooth) &&
+            now_ms >= PICO_INTERCOM_TRANSPORT_STARTUP_TIMEOUT_MS) {
+            if (!transport_warning) {
+                printf("Bluetooth Classic headset transport is still unavailable after %u ms; verify the Pico SDK BTstack checkout, CYW43 firmware support, and any custom status LED pin override.\n",
+                       (unsigned)PICO_INTERCOM_TRANSPORT_STARTUP_TIMEOUT_MS);
+            }
+            transport_warning = true;
+        } else if (bluetooth_runtime_has_transport(&bluetooth)) {
+            transport_warning = false;
+        }
         if (bluetooth.pairing_completed && bluetooth.completed_pairing_peer_id != 0U) {
             const uint8_t paired_peer_id = bluetooth.completed_pairing_peer_id;
             pairing_t completed_pairing = make_pairing(paired_peer_id);
@@ -220,7 +253,7 @@ int main(void) {
             }
         }
 
-        update_status_led(&bluetooth, pairing_in_progress, pairing_error, now_ms);
+        update_status_led(&bluetooth, pairing_in_progress, pairing_error, transport_warning, now_ms);
         pairing_button_was_pressed = pairing_button_pressed;
         sleep_ms(PICO_INTERCOM_PAIR_BUTTON_POLL_MS);
     }
