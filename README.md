@@ -1,21 +1,30 @@
 # pico-intercom
 
 `pico-intercom` is a Raspberry Pi Pico 2 W firmware project for a local
-**Bluetooth Classic headset intercom**.
+**Bluetooth Classic pico-intercom peer relay**.
 
 The Pico acts as a Bluetooth Classic transport/controller node. It does not
-capture analog microphone audio or drive analog speakers directly. Paired
-headsets handle their own local audio I/O, while the Pico relays encoded
-intercom frames, pairing state, and session control.
+capture analog microphone audio or drive analog speakers directly. Compatible
+peers running the same pico-intercom RFCOMM/SPP protocol handle their own local
+audio I/O, while the Pico relays encoded intercom frames, pairing state, and
+session control.
 
 ## Chosen wireless backend
 
-- **Transport:** Bluetooth Classic RFCOMM transport over the Pico SDK BTstack integration
+- **Transport:** Bluetooth Classic RFCOMM Serial Port Profile transport over the Pico SDK BTstack integration
 - **Board:** Raspberry Pi Pico 2 W
 - **SDK support used:** `pico_btstack_classic`, `pico_btstack_cyw43`, `pico_cyw43_arch_none`
-- **Audio model:** encoded intercom frames are exchanged with paired headsets and relayed across application sessions
+- **Audio model:** encoded intercom frames are exchanged with paired pico-intercom peers and relayed across application sessions
 
 Wi-Fi is not used by this project.
+
+## Important compatibility limit
+
+This firmware does **not** work with off-the-shelf consumer Bluetooth headsets.
+Typical headsets expose HSP/HFP voice profiles, which require SCO audio. On the
+Pico W / Pico 2 W CYW43439, SCO audio is still broken in the public firmware
+stack, so the only currently viable real hardware path is RFCOMM/SPP between
+other compatible pico-intercom peers.
 
 ## Current hardware behavior
 
@@ -24,29 +33,29 @@ On hardware, the firmware:
 1. boots and reports startup state over USB serial
 2. initializes CYW43, BTstack Classic, inquiry, SDP, and RFCOMM controller transport
 3. derives a stable local peer ID from the Pico unique board ID
-4. restores remembered headset pairings from persistent storage
-5. reconnects automatically when a remembered headset becomes available again
-6. supports pairing, connect, disconnect, and reconnect flows for headset peers
+4. restores remembered peer pairings from persistent storage
+5. reconnects automatically when a remembered compatible peer becomes available again
+6. supports pairing, connect, disconnect, and reconnect flows for compatible pico-intercom peers
 7. performs an application-level session handshake before treating a link as usable
 8. keeps the active intercom peer list in sync as sessions connect and disconnect
-9. lets the onboard pairing button request pairing with a selected headset peer
+9. lets the onboard pairing button request pairing with a selected compatible pico-intercom peer
 10. only reports the intercom path as operational once a session is established
-11. relays encoded intercom audio frames over the active Bluetooth Classic RFCOMM headset session while keepalives are healthy
+11. relays encoded intercom audio frames over the active Bluetooth Classic RFCOMM peer session while keepalives are healthy
 
 ## Audio architecture
 
 - The Pico **does not have an analog audio path** in this project.
 - The Pico **does not capture microphones or drive speakers directly**.
-- Headsets remain responsible for their own local microphone and speaker handling.
+- Compatible peers remain responsible for their own local microphone and speaker handling.
 - The firmware encodes and decodes intercom audio frames, queues them for
-  transport, and routes them between established headset sessions.
+  transport, and routes them between established peer sessions.
 - Host builds use software-generated frames so protocol and routing logic can be
   tested quickly without requiring Pico hardware.
 
 ## Intercom protocol
 
 Runtime traffic is wrapped in a small application protocol carried inside the
-Bluetooth Classic RFCOMM headset transport.
+Bluetooth Classic RFCOMM peer transport.
 
 - `HELLO`: announces peer identity and starts or resets a session
 - `HELLO_ACK`: confirms that the remote peer accepted the session
@@ -62,18 +71,18 @@ until the session handshake completes.
 
 ## Pairing and reconnect behavior
 
-- Remembered headsets are stored in flash on Pico targets.
+- Remembered compatible peers are stored in flash on Pico targets.
 - BTstack link keys are persisted by the Pico SDK TLV flash bank, while the
-  firmware stores remembered headset metadata in a separate flash sector ahead
+  firmware stores remembered peer metadata in a separate flash sector ahead
   of that BTstack-managed region.
-- On boot, the firmware reloads remembered headset IDs and reconnects
-  automatically when those headsets become available again.
-- Pairing is only persisted once the headset session is actually operational.
+- On boot, the firmware reloads remembered peer IDs and reconnects
+  automatically when those peers become available again.
+- Pairing is only persisted once the peer session is actually operational.
 - Secure Simple Pairing confirmations are accepted automatically, and legacy
-  pin-code requests use the common headset code `0000`.
+  pin-code requests use the common intercom code `0000`.
 - Pairing, connection, transport, and session failures are reported over USB
   serial and reflected in runtime state.
-- Explicit disconnect requests suppress automatic reconnect until the headset is
+- Explicit disconnect requests suppress automatic reconnect until the peer is
   paired or connected again deliberately.
 - Dead sessions are torn down and stale peers are removed from the active relay
   list so reconnects can establish a fresh session cleanly.
@@ -84,7 +93,7 @@ until the session handshake completes.
 
 - The repository models the Pico as a **Bluetooth Classic controller/relay** and
   validates the transport/session logic primarily through the fast host build.
-- Hardware validation still requires paired Bluetooth Classic headsets and live
+- Hardware validation still requires multiple paired pico-intercom peers and live
   on-device testing outside this environment.
 - The host runtime uses software-generated sample frames to keep tests fast and
   deterministic.
@@ -96,7 +105,7 @@ until the session handshake completes.
 - a Pico SDK 2.3.0 checkout with the `lib/btstack` submodule and CYW43 driver
   firmware content available to the build
 - The firmware build is configured for Pico 2 W only; Pico W is not supported
-- one or more Bluetooth Classic headsets compatible with the intended deployment
+- one or more additional Bluetooth Classic peers running compatible pico-intercom firmware
 - keep GPIO 20, 23, 24, 25, and 29 free for the onboard CYW43 wireless device
 - if you override `PICO_INTERCOM_STATUS_LED_PIN`, choose a GPIO that is not used
   by CYW43; by default the firmware uses the onboard wireless LED via
@@ -136,7 +145,7 @@ cmake --build build-firmware
 The build produces a UF2 image for the Pico 2 W.
 
 The firmware enables BTstack RFCOMM SDP client discovery in `btstack_config.h`
-because reconnect and remote service lookup depend on
+because reconnect and remote Serial Port Profile service lookup depend on
 `sdp_client_query_rfcomm_channel_and_name_for_uuid(...)`.
 
 ## Flashing
@@ -154,15 +163,15 @@ because reconnect and remote service lookup depend on
 4. If the transport stays unavailable for more than 10 seconds, treat that as a
    startup fault and verify the Pico SDK checkout, BTstack submodule, and CYW43
    firmware support before retrying.
-5. Restore remembered headsets automatically on boot, or press the onboard
-   pairing button to start pairing a headset peer.
+5. Restore remembered peers automatically on boot, or press the onboard pairing
+   button to start pairing a compatible pico-intercom peer.
 6. Wait for session handshake completion before treating the link as operational.
 7. Confirm that the serial log reports at least one ready session before
    expecting audio relay traffic.
 
-If the radio drops, the session times out, or the headset resets, the runtime
+If the radio drops, the session times out, or the peer resets, the runtime
 reports the failure explicitly, clears the stale session, and allows remembered
-headsets to reconnect with a fresh session.
+peers to reconnect with a fresh session.
 
 ## Validation
 
@@ -185,8 +194,8 @@ duplicate-packet rejection, and timeout handling.
 ## Source layout
 
 - `src/bluetooth.c` - high-level runtime state, command handling, audio relay integration
-- `src/bluetooth_transport.c` - Classic headset transport queues, peer bookkeeping, and reconnect logic
-- `src/bluetooth_classic.c` - Classic headset stack wrapper used by the Pico runtime and host tests
+- `src/bluetooth_transport.c` - Classic peer transport queues, peer bookkeeping, and reconnect logic
+- `src/bluetooth_classic.c` - Classic peer stack wrapper used by the Pico runtime and host tests
 - `src/pairings.c` - host file storage and Pico flash-backed pairing persistence
 - `src/main.c` - Pico firmware entrypoint and button/LED loop
 - `tests/test_intercom.c` - host-side regression coverage

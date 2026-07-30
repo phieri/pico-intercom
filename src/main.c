@@ -156,12 +156,10 @@ int main(void) {
         for (size_t index = 0; index < persisted_count; ++index) {
             const uint8_t peer_id = persisted_pairings[index].peer_id;
             if (bluetooth_restore_pairing(&bluetooth, peer_id)) {
-                (void)bluetooth_classic_stack_report_headset(
-                    &bluetooth.classic_stack, peer_id, persisted_pairings[index].name, true);
-                printf("Restored remembered Bluetooth Classic headset %u.\n",
+                printf("Restored remembered Bluetooth Classic peer %u.\n",
                        (unsigned)peer_id);
             } else {
-                printf("Failed to restore remembered Bluetooth Classic headset %u.\n",
+                printf("Failed to restore remembered Bluetooth Classic peer %u.\n",
                        (unsigned)peer_id);
             }
         }
@@ -170,15 +168,16 @@ int main(void) {
     printf("Pico intercom ready.\n");
     printf("Local Bluetooth peer id: %u.\n", (unsigned)bluetooth.local_peer_id);
     if (bluetooth_runtime_has_transport(&bluetooth)) {
-        printf("Bluetooth Classic headset transport ready; CYW43 controller initialized.\n");
+        printf("Bluetooth Classic RFCOMM peer transport ready; CYW43 controller initialized.\n");
     } else {
-        printf("Bluetooth Classic headset transport unavailable; check CYW43 controller initialization.\n");
+        printf("Bluetooth Classic RFCOMM peer transport unavailable; check CYW43 controller initialization.\n");
     }
     if (persisted_count == 0U) {
-        printf("No persisted Bluetooth Classic headset pairings found; press the onboard button to pair.\n");
+        printf("No persisted Bluetooth Classic peer pairings found; press the onboard button to pair a compatible pico-intercom peer.\n");
     } else {
-        printf("Loaded %zu remembered Bluetooth Classic headset pairing(s).\n", persisted_count);
+        printf("Loaded %zu remembered Bluetooth Classic peer pairing(s).\n", persisted_count);
     }
+    printf("Consumer Bluetooth headsets are not supported on Pico 2 W: the CYW43439 firmware still breaks SCO audio, so this firmware uses RFCOMM/SPP with other compatible pico-intercom peers instead.\n");
 
 #ifdef PICO_INTERCOM_TARGET
     while (true) {
@@ -188,7 +187,7 @@ int main(void) {
         if (!bluetooth_runtime_has_transport(&bluetooth) &&
             now_ms >= PICO_INTERCOM_TRANSPORT_STARTUP_TIMEOUT_MS) {
             if (!transport_warning) {
-                printf("Bluetooth Classic headset transport is still unavailable after %u ms; verify the Pico SDK BTstack checkout, CYW43 firmware support, and any custom status LED pin override.\n",
+                printf("Bluetooth Classic RFCOMM peer transport is still unavailable after %u ms; verify the Pico SDK BTstack checkout, CYW43 firmware support, and any custom status LED pin override.\n",
                        (unsigned)PICO_INTERCOM_TRANSPORT_STARTUP_TIMEOUT_MS);
             }
             transport_warning = true;
@@ -198,15 +197,15 @@ int main(void) {
         if (bluetooth.pairing_completed && bluetooth.completed_pairing_peer_id != 0U) {
             const uint8_t paired_peer_id = bluetooth.completed_pairing_peer_id;
             pairing_t completed_pairing = make_pairing(paired_peer_id);
-            printf("Persisting Bluetooth Classic headset pairing for peer %u.\n",
+            printf("Persisting Bluetooth Classic peer pairing for peer %u.\n",
                    (unsigned)paired_peer_id);
             if (pairing_store_save(&pairing_store, &completed_pairing)) {
-                printf("Bluetooth Classic headset pairing complete for peer %u; session is operational.\n",
+                printf("Bluetooth Classic peer pairing complete for peer %u; session is operational.\n",
                        (unsigned)paired_peer_id);
             } else {
                 bluetooth.storage_error = true;
                 pairing_error = true;
-                printf("Bluetooth Classic headset session reached peer %u but pairing persistence failed.\n",
+                printf("Bluetooth Classic peer session reached peer %u but pairing persistence failed.\n",
                        (unsigned)paired_peer_id);
             }
             bluetooth.pairing_completed = false;
@@ -218,11 +217,11 @@ int main(void) {
             pairing_started_ms = now_ms;
             if (bluetooth_handle_pairing_button(&bluetooth, PICO_INTERCOM_PAIR_BUTTON_PEER_ID,
                                                 true)) {
-                printf("Bluetooth Classic headset pairing started for peer %u; waiting for session readiness.\n",
+                printf("Bluetooth Classic peer pairing started for peer %u; waiting for session readiness.\n",
                        (unsigned)bluetooth.pairing_peer_id);
             } else {
                 pairing_error = true;
-                printf("Bluetooth Classic headset pairing could not start; no suitable headset is ready.\n");
+                printf("Bluetooth Classic peer pairing could not start; no suitable compatible pico-intercom peer is ready.\n");
             }
         }
 
@@ -242,7 +241,7 @@ int main(void) {
             if ((now_ms - last_status_report_ms) >= 1000U ||
                 bluetooth.session_ready_peer_count == 0U ||
                 last_reported_ready_peers == 0U) {
-                printf("Bluetooth Classic status: transport=%s, sessions=%zu, connected_headsets=%zu, last_error=%s.\n",
+                printf("Bluetooth Classic status: transport=%s, sessions=%zu, connected_peers=%zu, last_error=%s.\n",
                        bluetooth_runtime_has_transport(&bluetooth) ? "ready" : "down",
                        bluetooth.session_ready_peer_count, bluetooth.connected_peer_count,
                        bluetooth_error_name(bluetooth.last_error_code));
