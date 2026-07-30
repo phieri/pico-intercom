@@ -7,7 +7,7 @@
 
 #if defined(PICO_INTERCOM_TARGET)
 #include "hardware/flash.h"
-#include "hardware/sync.h"
+#include "pico/btstack_flash_bank.h"
 #include "pico/flash.h"
 #define PICO_INTERCOM_HAS_FLASH_STORAGE 1
 #else
@@ -26,7 +26,13 @@
                                           sizeof(uint32_t) + sizeof(uint32_t) + \
                                           sizeof(pairing_t) * PAIRING_MAX_COUNT)
 #define PAIRING_FLASH_REGION_SIZE FLASH_SECTOR_SIZE
-#define PAIRING_FLASH_REGION_OFFSET (PICO_FLASH_SIZE_BYTES - PAIRING_FLASH_REGION_SIZE)
+#define PAIRING_FLASH_REGION_OFFSET (PICO_FLASH_BANK_STORAGE_OFFSET - PAIRING_FLASH_REGION_SIZE)
+
+_Static_assert(PICO_FLASH_BANK_STORAGE_OFFSET >= PAIRING_FLASH_REGION_SIZE,
+               "Pairing store must fit before the BTstack TLV flash bank");
+_Static_assert(PAIRING_FLASH_REGION_OFFSET + PAIRING_FLASH_REGION_SIZE <=
+                   PICO_FLASH_BANK_STORAGE_OFFSET,
+               "Pairing store must not overlap the BTstack TLV flash bank");
 
 typedef struct {
     uint32_t magic;
@@ -36,6 +42,16 @@ typedef struct {
     pairing_t pairings[PAIRING_MAX_COUNT];
     uint8_t padding[PAIRING_FLASH_IMAGE_SIZE - PAIRING_FLASH_IMAGE_HEADER_BYTES];
 } pairing_flash_image_t;
+
+static void pairing_store_flash_write_callback(void *context) {
+    const pairing_flash_image_t *image = (const pairing_flash_image_t *)context;
+    if (image == NULL) {
+        return;
+    }
+
+    flash_range_erase(PAIRING_FLASH_REGION_OFFSET, PAIRING_FLASH_REGION_SIZE);
+    flash_range_program(PAIRING_FLASH_REGION_OFFSET, (const uint8_t *)image, sizeof(*image));
+}
 #endif
 
 static bool pairing_store_is_duplicate(const pairing_t *pairings, size_t count,
@@ -169,10 +185,12 @@ static bool pairing_store_flash_write_image(const pairing_flash_image_t *image) 
         return false;
     }
 
-    uint32_t interrupts = save_and_disable_interrupts();
-    flash_range_erase(PAIRING_FLASH_REGION_OFFSET, PAIRING_FLASH_REGION_SIZE);
-    flash_range_program(PAIRING_FLASH_REGION_OFFSET, (const uint8_t *)image, sizeof(*image));
-    restore_interrupts(interrupts);
+    const int flash_status =
+        flash_safe_execute(pairing_store_flash_write_callback, (void *)image, UINT32_MAX);
+    if (flash_status != PICO_OK) {
+        fprintf(stderr, "WARNING: flash pairing write failed with status %d\n", flash_status);
+        return false;
+    }
 
     pairing_flash_image_t verified = {0};
     if (!pairing_store_flash_read_image(&verified)) {

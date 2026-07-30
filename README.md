@@ -63,6 +63,9 @@ until the session handshake completes.
 ## Pairing and reconnect behavior
 
 - Remembered headsets are stored in flash on Pico targets.
+- BTstack link keys are persisted by the Pico SDK TLV flash bank, while the
+  firmware stores remembered headset metadata in a separate flash sector ahead
+  of that BTstack-managed region.
 - On boot, the firmware reloads remembered headset IDs and reconnects
   automatically when those headsets become available again.
 - Pairing is only persisted once the headset session is actually operational.
