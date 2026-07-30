@@ -1,4 +1,4 @@
-name: Build Raspberry Pi Pico W Firmware
+name: Build Raspberry Pi Pico 2 W Firmware
 
 on:
   push:
@@ -18,14 +18,10 @@ env:
 
 jobs:
   build-firmware:
-    name: Build Firmware (${{ matrix.board }})
+    name: Build Firmware
     runs-on: ubuntu-latest
     permissions:
       contents: read
-
-    strategy:
-      matrix:
-        board: [pico_w, pico2_w]
 
     steps:
     - name: Checkout repository
@@ -60,7 +56,7 @@ jobs:
 
     - name: Configure CMake
       working-directory: build
-      run: cmake .. -DCMAKE_BUILD_TYPE=Release -DPICO_BOARD=${{ matrix.board }}
+      run: cmake .. -DCMAKE_BUILD_TYPE=Release -DPICO_BOARD=pico2_w
 
     - name: Build firmware
       working-directory: build
@@ -75,7 +71,7 @@ jobs:
     - name: Upload firmware artifacts
       uses: actions/upload-artifact@v7
       with:
-        name: pico-intercom-firmware-${{ matrix.board }}
+        name: pico-intercom-firmware-pico2_w
         path: |
           build/*.uf2
           build/*.elf

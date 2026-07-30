@@ -91,8 +91,9 @@ until the session handshake completes.
 
 ## Hardware requirements
 
-- Raspberry Pi Pico 2 W
+- Raspberry Pi Pico 2 W only
 - USB cable for flashing and serial logs
+- The firmware build is configured for Pico 2 W only; Pico W is not supported
 - one or more Bluetooth Classic headsets compatible with the intended deployment
 
 ## Build and test
