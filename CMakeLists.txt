@@ -24,6 +24,7 @@ add_library(intercom_core STATIC
     src/bluetooth.c
     src/bluetooth_transport.c
     src/bluetooth_classic.c
+    src/bluetooth_headset_profile.c
     src/pairings.c
 )
 
