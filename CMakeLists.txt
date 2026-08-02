@@ -39,6 +39,7 @@ if(NOT PICO_INTERCOM_FORCE_HOST_BUILD)
         hardware_sync
         pico_cyw43_arch_none
         pico_btstack_ble
+        pico_btstack_classic
         pico_btstack_cyw43
         pico_unique_id
     )

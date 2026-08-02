@@ -5,6 +5,7 @@
 
 #if defined(PICO_INTERCOM_TARGET)
 #include "btstack.h"
+#include "pico/btstack_cyw43.h"
 #include "pico/cyw43_arch.h"
 #include "pico/stdlib.h"
 #endif
@@ -12,12 +13,16 @@
 #if defined(PICO_INTERCOM_TARGET)
 static bool bluetooth_le_audio_target_initialized = false;
 
-static void bluetooth_le_audio_target_initialize(void) {
+static bool bluetooth_le_audio_target_initialize(void) {
     if (bluetooth_le_audio_target_initialized) {
-        return;
+        return true;
     }
 
-    btstack_init();
+    async_context_t *context = cyw43_arch_async_context();
+    if (context == NULL || !btstack_cyw43_init(context)) {
+        return false;
+    }
+
     gap_set_local_name("Pico Intercom");
 
     static const uint8_t advertisement_data[] = {
@@ -29,6 +34,7 @@ static void bluetooth_le_audio_target_initialize(void) {
     gap_advertisements_enable(1);
 
     bluetooth_le_audio_target_initialized = true;
+    return true;
 }
 #endif
 
@@ -1012,7 +1018,9 @@ bool bluetooth_le_audio_stack_set_enabled(bluetooth_le_audio_stack_t *stack, boo
     stack->pairing_enabled = enabled;
 
 #if defined(PICO_INTERCOM_TARGET)
-    bluetooth_le_audio_target_initialize();
+    if (!bluetooth_le_audio_target_initialize()) {
+        return false;
+    }
     (void)bluetooth_transport_set_enabled(&stack->transport, enabled);
     if (enabled) {
         if (!bluetooth_le_audio_backend_init(stack)) {
