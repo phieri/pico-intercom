@@ -8,6 +8,7 @@
 #define ENABLE_PRINTF 1
 #define ENABLE_PRINTF_HEXDUMP 1
 #define ENABLE_CLASSIC 1
+#define ENABLE_SDP_CLIENT 1
 
 /* Use malloc-backed buffers so BTstack can grow its classic control structures as needed. */
 #define HAVE_MALLOC 1

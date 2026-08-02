@@ -355,6 +355,7 @@ enum {
     BLUETOOTH_CLASSIC_SDP_BUFFER_BYTES = 180U,
     BLUETOOTH_CLASSIC_INQUIRY_DURATION = 4U,
     BLUETOOTH_CLASSIC_DEVICE_CLASS = 0x240404U,
+    BLUETOOTH_CLASSIC_SDP_MAX_ATTEMPTS = 3U,
 };
 
 #define BLUETOOTH_CLASSIC_DEFAULT_PIN "0000"
@@ -557,6 +558,10 @@ static void bluetooth_classic_backend_maybe_start_sdp_query(void) {
         if (peer != NULL && peer->last_sdp_query_ms != 0U &&
             (bluetooth_classic_active_stack->transport.last_poll_ms - peer->last_sdp_query_ms) <
                 BLUETOOTH_TRANSPORT_SDP_RETRY_MS) {
+            continue;
+        }
+
+        if (memcmp(backend_peer->address, (bd_addr_t){0}, sizeof(backend_peer->address)) == 0) {
             continue;
         }
 
@@ -881,8 +886,23 @@ static void bluetooth_classic_backend_packet_handler(uint8_t packet_type, uint16
                 bluetooth_classic_backend_peer_t *backend_peer =
                     bluetooth_classic_backend_peer_by_id(
                         bluetooth_classic_backend.sdp_query_peer_id, false);
+                bluetooth_transport_peer_info_t *peer =
+                    bluetooth_classic_get_peer(stack, bluetooth_classic_backend.sdp_query_peer_id,
+                                               false);
                 if (backend_peer != NULL && backend_peer->rfcomm_channel == 0U) {
-                    backend_peer->sdp_query_needed = true;
+                    const bool should_retry =
+                        peer != NULL && peer->sdp_query_attempts < BLUETOOTH_CLASSIC_SDP_MAX_ATTEMPTS;
+                    backend_peer->sdp_query_needed = should_retry;
+                    if (!should_retry) {
+                        backend_peer->connect_requested = false;
+                        if (peer != NULL) {
+                            peer->audio_ready = false;
+                            peer->pairing_pending = false;
+                            peer->reconnect_blocked = true;
+                        }
+                        printf("Bluetooth Classic headset %u does not expose the required headset service for the current BL audio-oriented session path.\n",
+                               (unsigned)bluetooth_classic_backend.sdp_query_peer_id);
+                    }
                 }
             }
             bluetooth_classic_backend.sdp_query_peer_id = 0U;
@@ -1143,7 +1163,7 @@ bool bluetooth_classic_stack_restore_pairing(bluetooth_classic_stack_t *stack, u
         bluetooth_classic_backend_peer_by_id(peer_id, true);
     if (backend_peer != NULL) {
         backend_peer->connect_requested = false;
-        backend_peer->sdp_query_needed = true;
+        backend_peer->sdp_query_needed = false;
     }
     return true;
 #else
@@ -1212,7 +1232,7 @@ bool bluetooth_classic_stack_report_headset(bluetooth_classic_stack_t *stack, ui
         }
     }
     if (previous_audio_ready != audio_ready) {
-        printf("Bluetooth Classic headset %u %s audio transport is %s.\n", (unsigned)peer_id,
+        printf("Bluetooth Classic peer %u %s audio transport is %s.\n", (unsigned)peer_id,
                name != NULL && name[0] != '\0' ? name : "peer",
                audio_ready ? "ready" : "negotiating");
     }
@@ -1221,7 +1241,7 @@ bool bluetooth_classic_stack_report_headset(bluetooth_classic_stack_t *stack, ui
     const bool reported =
         bluetooth_transport_report_peer(&stack->transport, peer_id, name, audio_ready);
     if (reported) {
-        printf("Bluetooth Classic headset %u %s audio transport is %s.\n",
+        printf("Bluetooth Classic peer %u %s audio transport is %s.\n",
                (unsigned)peer_id, name != NULL && name[0] != '\0' ? name : "peer",
                audio_ready ? "ready" : "negotiating");
     }

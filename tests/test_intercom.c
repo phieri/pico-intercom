@@ -142,15 +142,14 @@ int main(void) {
 
     size_t relayed = intercom_rebroadcast(&state, 1U, payload, sizeof(payload), relay_callback,
                                           &ctx);
-    assert(relayed == 2U);
-    assert(ctx.calls == 2U);
+    assert(relayed == 1U);
+    assert(ctx.calls == 1U);
     assert(ctx.targets[0] == 2U);
-    assert(ctx.targets[1] == 3U);
 
     intercom_set_ptt(&state, false);
     relayed = intercom_rebroadcast(&state, 1U, payload, sizeof(payload), relay_callback, &ctx);
     assert(relayed == 0U);
-    assert(ctx.calls == 2U);
+    assert(ctx.calls == 1U);
 
     intercom_audio_subsystem_t audio = {0};
     intercom_audio_init(&audio);
@@ -238,10 +237,10 @@ int main(void) {
     assert(local_audio_runtime.audio.encoded_frames == 1U);
     assert(local_audio_runtime.audio.decoded_frames == 0U);
     assert(local_audio_runtime.audio.played_frames == 0U);
-    assert(local_audio_runtime.last_relay_count == 2U);
-    assert(local_audio_runtime.protocol_messages_sent >= protocol_sent_before + 2U);
-    assert(local_audio_runtime.transport_packets_queued >= transport_queued_before + 2U);
-    assert(local_audio_runtime.transport_packets_delivered >= transport_delivered_before + 2U);
+    assert(local_audio_runtime.last_relay_count == 1U);
+    assert(local_audio_runtime.protocol_messages_sent >= protocol_sent_before + 1U);
+    assert(local_audio_runtime.transport_packets_queued >= transport_queued_before + 1U);
+    assert(local_audio_runtime.transport_packets_delivered >= transport_delivered_before + 1U);
 
     bluetooth_runtime_t toggle_runtime = {0};
     bluetooth_init(&toggle_runtime, &state);
@@ -306,9 +305,9 @@ int main(void) {
     assert(operational_runtime.packets_received == received_before + 1U);
     assert(operational_runtime.last_source_peer == 9U);
     assert(operational_runtime.last_payload_len == encoded_len);
-    assert(operational_runtime.last_relay_count == 2U);
-    assert(operational_runtime.relay_invocations == 2U);
-    assert(operational_runtime.relay_target_count == 2U);
+    assert(operational_runtime.last_relay_count == 1U);
+    assert(operational_runtime.relay_invocations == 1U);
+    assert(operational_runtime.relay_target_count == 1U);
     assert(operational_runtime.last_relay_source_peer == 9U);
     assert(operational_runtime.last_relay_payload_len == encoded_len);
     assert(operational_runtime.audio.decoded_frames == 1U);

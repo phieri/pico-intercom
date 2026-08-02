@@ -215,7 +215,7 @@ void bluetooth_transport_init(bluetooth_transport_t *transport) {
     memset(transport, 0, sizeof(*transport));
     transport->initialized = true;
     transport->enabled = true;
-    transport->medium = BLUETOOTH_TRANSPORT_MEDIUM_CLASSIC_HEADSET;
+    transport->medium = BLUETOOTH_TRANSPORT_MEDIUM_CLASSIC_AUDIO;
     transport->local_peer_id = 1U;
     transport->backend_ready = true;
     transport->network_connected = true;
