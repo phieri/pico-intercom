@@ -10,6 +10,10 @@
 #define ENABLE_CLASSIC 1
 #define ENABLE_SDP_CLIENT 1
 
+/* LE device database sizing for the Pico 2 W firmware build. */
+#define MAX_NR_LE_DEVICE_DB_ENTRIES 16
+#define NVM_NUM_DEVICE_DB_ENTRIES 16
+
 /* Use malloc-backed buffers so BTstack can grow its LE Audio control structures as needed. */
 #define HAVE_MALLOC 1
 
