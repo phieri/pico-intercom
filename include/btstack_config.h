@@ -14,6 +14,10 @@
 #define MAX_NR_LE_DEVICE_DB_ENTRIES 16
 #define NVM_NUM_DEVICE_DB_ENTRIES 16
 
+/* Enable the LE roles used by the intercom transport. */
+#define ENABLE_LE_CENTRAL 1
+#define ENABLE_LE_PERIPHERAL 1
+
 /* Use malloc-backed buffers so BTstack can grow its LE Audio control structures as needed. */
 #define HAVE_MALLOC 1
 
