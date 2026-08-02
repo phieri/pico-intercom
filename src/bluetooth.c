@@ -86,7 +86,7 @@ static bool bluetooth_runtime_is_ready(const bluetooth_runtime_t *runtime) {
 bool bluetooth_runtime_has_transport(const bluetooth_runtime_t *runtime) {
     return runtime != NULL && runtime->initialized && runtime->enabled &&
            runtime->platform_initialized && !runtime->platform_error &&
-           runtime->classic_stack.transport.backend_ready;
+           runtime->le_audio_stack.transport.backend_ready;
 }
 
 bool bluetooth_runtime_is_operational(const bluetooth_runtime_t *runtime) {
@@ -304,7 +304,7 @@ static void bluetooth_set_reconnect_blocked(bluetooth_runtime_t *runtime, uint8_
 
     for (size_t index = 0; index < INTERCOM_MAX_PEERS; ++index) {
         bluetooth_transport_peer_info_t *peer =
-            &runtime->classic_stack.transport.discovered_peers[index];
+            &runtime->le_audio_stack.transport.discovered_peers[index];
         if (!peer->valid || peer->peer_id != peer_id) {
             continue;
         }
@@ -313,14 +313,14 @@ static void bluetooth_set_reconnect_blocked(bluetooth_runtime_t *runtime, uint8_
     }
 }
 
-static void bluetooth_flush_classic_packets(bluetooth_runtime_t *runtime) {
+static void bluetooth_flush_le_audio_packets(bluetooth_runtime_t *runtime) {
     if (runtime == NULL) {
         return;
     }
 
 #if !defined(PICO_INTERCOM_TARGET)
-    bluetooth_classic_packet_t packet;
-    while (bluetooth_classic_stack_dequeue_packet(&runtime->classic_stack, &packet)) {
+    bluetooth_le_audio_packet_t packet;
+    while (bluetooth_le_audio_stack_dequeue_packet(&runtime->le_audio_stack, &packet)) {
         runtime->transport_packets_delivered++;
         runtime->last_transport_source_peer = packet.source_peer;
         runtime->last_transport_target_peer = packet.target_peer;
@@ -333,11 +333,11 @@ static void bluetooth_sync_transport_counters(bluetooth_runtime_t *runtime) {
         return;
     }
 
-    runtime->transport_packets_queued = runtime->classic_stack.transport.packets_queued;
-    runtime->transport_packets_delivered = runtime->classic_stack.transport.packets_delivered;
-    runtime->transport_packets_dropped = runtime->classic_stack.transport.packets_dropped;
-    runtime->last_transport_source_peer = runtime->classic_stack.transport.last_source_peer;
-    runtime->last_transport_target_peer = runtime->classic_stack.transport.last_target_peer;
+    runtime->transport_packets_queued = runtime->le_audio_stack.transport.packets_queued;
+    runtime->transport_packets_delivered = runtime->le_audio_stack.transport.packets_delivered;
+    runtime->transport_packets_dropped = runtime->le_audio_stack.transport.packets_dropped;
+    runtime->last_transport_source_peer = runtime->le_audio_stack.transport.last_source_peer;
+    runtime->last_transport_target_peer = runtime->le_audio_stack.transport.last_target_peer;
 }
 
 static bluetooth_peer_state_t bluetooth_peer_state_from_transport(
@@ -360,11 +360,11 @@ static void bluetooth_sync_connected_peers(bluetooth_runtime_t *runtime) {
         return;
     }
 
-    runtime->connected_peer_count = runtime->classic_stack.transport.connected_peer_count;
+    runtime->connected_peer_count = runtime->le_audio_stack.transport.connected_peer_count;
     for (size_t index = 0; index < runtime->connected_peer_count; ++index) {
-        runtime->connected_peers[index] = runtime->classic_stack.transport.connected_peers[index];
+        runtime->connected_peers[index] = runtime->le_audio_stack.transport.connected_peers[index];
         runtime->peer_states[index] = bluetooth_peer_state_from_transport(
-            runtime->classic_stack.transport.peer_states[index]);
+            runtime->le_audio_stack.transport.peer_states[index]);
     }
     for (size_t index = runtime->connected_peer_count; index < INTERCOM_MAX_PEERS; ++index) {
         runtime->connected_peers[index] = 0U;
@@ -441,7 +441,7 @@ static bool bluetooth_queue_protocol_message(bluetooth_runtime_t *runtime, uint8
         return false;
     }
 
-    if (!bluetooth_classic_stack_queue_packet(&runtime->classic_stack, runtime->local_peer_id,
+    if (!bluetooth_le_audio_stack_queue_packet(&runtime->le_audio_stack, runtime->local_peer_id,
                                               peer_id, encoded, encoded_len)) {
         runtime->protocol_messages_dropped++;
         link->dropped_messages++;
@@ -573,7 +573,7 @@ static void bluetooth_service_protocol_links(bluetooth_runtime_t *runtime) {
                 const bool first_handshake_attempt = !link->hello_sent;
                 if (bluetooth_send_hello(runtime, link->peer_id, INTERCOM_PROTOCOL_MESSAGE_HELLO)) {
                     if (first_handshake_attempt) {
-                        printf("Bluetooth Classic headset session handshake with peer %u in progress.\n",
+                        printf("Bluetooth LE Audio headset session handshake with peer %u in progress.\n",
                                (unsigned)link->peer_id);
                     }
                 }
@@ -582,14 +582,14 @@ static void bluetooth_service_protocol_links(bluetooth_runtime_t *runtime) {
         }
 
         if (now_ms - link->last_activity_ms >= BLUETOOTH_SESSION_TIMEOUT_MS) {
-            printf("Bluetooth Classic headset session with peer %u timed out; disconnecting stale link.\n",
+            printf("Bluetooth LE Audio headset session with peer %u timed out; disconnecting stale link.\n",
                    (unsigned)link->peer_id);
             link->link_state = BLUETOOTH_LINK_STATE_DEGRADED;
             link->session_active = false;
             bluetooth_refresh_session_ready_count(runtime);
             bluetooth_record_error(runtime, link->peer_id, BLUETOOTH_ERROR_NOT_READY);
             bluetooth_note_disconnected_link(runtime, link->peer_id);
-            (void)bluetooth_classic_stack_disconnect(&runtime->classic_stack, link->peer_id);
+            (void)bluetooth_le_audio_stack_disconnect(&runtime->le_audio_stack, link->peer_id);
             bluetooth_set_reconnect_blocked(runtime, link->peer_id, false);
         } else if (now_ms - link->last_activity_ms >= BLUETOOTH_KEEPALIVE_MS) {
             (void)bluetooth_queue_protocol_message(runtime, link->peer_id,
@@ -633,7 +633,7 @@ static bool bluetooth_platform_initialize_target(bluetooth_runtime_t *runtime) {
     const int cyw43_status = cyw43_arch_init();
     if (cyw43_status != 0) {
         runtime->platform_error = true;
-        fprintf(stderr, "Bluetooth Classic controller init failed: cyw43_arch_init returned %d\n",
+        fprintf(stderr, "Bluetooth LE Audio controller init failed: cyw43_arch_init returned %d\n",
                 cyw43_status);
         return false;
     }
@@ -642,7 +642,7 @@ static bool bluetooth_platform_initialize_target(bluetooth_runtime_t *runtime) {
     runtime->platform_error = false;
     runtime->advertising = true;
     runtime->scanning = false;
-    printf("Bluetooth Classic headset controller active; CYW43 transport initialized.\n");
+    printf("Bluetooth LE Audio headset controller active; CYW43 transport initialized.\n");
     return true;
 }
 #endif
@@ -691,11 +691,11 @@ void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom) {
     runtime->initialized = true;
     runtime->next_session_id = ((uint32_t)runtime->local_peer_id << 24U) | 1U;
     intercom_audio_init(&runtime->audio);
-    bluetooth_classic_stack_init(&runtime->classic_stack);
-    bluetooth_classic_stack_set_local_peer_id(&runtime->classic_stack, runtime->local_peer_id);
+    bluetooth_le_audio_stack_init(&runtime->le_audio_stack);
+    bluetooth_le_audio_stack_set_local_peer_id(&runtime->le_audio_stack, runtime->local_peer_id);
     bluetooth_reset_peer_states(runtime);
     if (!bluetooth_platform_set_enabled(runtime, runtime->enabled) ||
-        !bluetooth_classic_stack_set_enabled(&runtime->classic_stack, runtime->enabled)) {
+        !bluetooth_le_audio_stack_set_enabled(&runtime->le_audio_stack, runtime->enabled)) {
         runtime->platform_error = true;
         runtime->enabled = false;
         runtime->advertising = false;
@@ -714,14 +714,14 @@ bool bluetooth_set_enabled(bluetooth_runtime_t *runtime, bool enabled) {
 
     if (!bluetooth_platform_set_enabled(runtime, enabled)) {
         runtime->enabled = false;
-        (void)bluetooth_classic_stack_set_enabled(&runtime->classic_stack, false);
+        (void)bluetooth_le_audio_stack_set_enabled(&runtime->le_audio_stack, false);
         bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_DISABLED);
         return false;
     }
 
     runtime->enabled = enabled;
     intercom_audio_set_enabled(&runtime->audio, enabled);
-    if (!bluetooth_classic_stack_set_enabled(&runtime->classic_stack, enabled)) {
+    if (!bluetooth_le_audio_stack_set_enabled(&runtime->le_audio_stack, enabled)) {
         runtime->platform_error = true;
         runtime->enabled = false;
         bluetooth_record_error(runtime, 0U, BLUETOOTH_ERROR_NOT_READY);
@@ -788,7 +788,7 @@ bool bluetooth_connect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
         return true;
     }
 
-    if (!bluetooth_classic_stack_connect(&runtime->classic_stack, peer_id)) {
+    if (!bluetooth_le_audio_stack_connect(&runtime->le_audio_stack, peer_id)) {
         runtime->failed_connections++;
         bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_NOT_READY);
         return false;
@@ -836,7 +836,7 @@ bool bluetooth_disconnect_peer(bluetooth_runtime_t *runtime, uint8_t peer_id) {
     runtime->successful_disconnections++;
     runtime->last_error_code = BLUETOOTH_ERROR_NONE;
 
-    (void)bluetooth_classic_stack_disconnect(&runtime->classic_stack, peer_id);
+    (void)bluetooth_le_audio_stack_disconnect(&runtime->le_audio_stack, peer_id);
     bluetooth_note_disconnected_link(runtime, peer_id);
     if (runtime->intercom != NULL) {
         (void)intercom_remove_peer(runtime->intercom, peer_id);
@@ -995,7 +995,7 @@ bool bluetooth_handle_pairing_button(bluetooth_runtime_t *runtime, uint8_t peer_
     }
 
     uint8_t selected_peer_id = peer_id;
-    if (!bluetooth_classic_stack_select_pairing_candidate(&runtime->classic_stack,
+    if (!bluetooth_le_audio_stack_select_pairing_candidate(&runtime->le_audio_stack,
                                                           &selected_peer_id)) {
         selected_peer_id = peer_id;
     }
@@ -1018,7 +1018,7 @@ bool bluetooth_restore_pairing(bluetooth_runtime_t *runtime, uint8_t peer_id) {
         return false;
     }
 
-    if (!bluetooth_classic_stack_restore_pairing(&runtime->classic_stack, peer_id)) {
+    if (!bluetooth_le_audio_stack_restore_pairing(&runtime->le_audio_stack, peer_id)) {
         bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_STORAGE);
         return false;
     }
@@ -1064,7 +1064,7 @@ static void bluetooth_handle_protocol_audio(bluetooth_runtime_t *runtime, uint8_
                                                          payload_len, bluetooth_relay, runtime);
     }
     runtime->relay_target_count = runtime->pending_relay_target_count;
-    bluetooth_flush_classic_packets(runtime);
+    bluetooth_flush_le_audio_packets(runtime);
     bluetooth_sync_transport_counters(runtime);
 }
 
@@ -1126,7 +1126,7 @@ bool bluetooth_handle_transport_payload(bluetooth_runtime_t *runtime, uint8_t so
         link->hello_received = true;
         link->link_state = BLUETOOTH_LINK_STATE_HANDSHAKING;
         bluetooth_mark_session_ready(runtime, link, source_peer, link->session_id);
-        printf("Bluetooth Classic headset session hello received from peer %u.\n",
+        printf("Bluetooth LE Audio headset session hello received from peer %u.\n",
                (unsigned)source_peer);
         return bluetooth_send_hello(runtime, source_peer, INTERCOM_PROTOCOL_MESSAGE_HELLO_ACK);
     case INTERCOM_PROTOCOL_MESSAGE_HELLO_ACK:
@@ -1137,7 +1137,7 @@ bool bluetooth_handle_transport_payload(bluetooth_runtime_t *runtime, uint8_t so
         }
         bluetooth_mark_session_ready(runtime, link, source_peer, link->session_id);
         runtime->successful_connections++;
-        printf("Bluetooth Classic headset session established with peer %u.\n",
+        printf("Bluetooth LE Audio headset session established with peer %u.\n",
                (unsigned)source_peer);
         return true;
     case INTERCOM_PROTOCOL_MESSAGE_KEEPALIVE:
@@ -1173,16 +1173,16 @@ bool bluetooth_handle_transport_payload(bluetooth_runtime_t *runtime, uint8_t so
         link->link_state = BLUETOOTH_LINK_STATE_DEGRADED;
         bluetooth_record_error(runtime, source_peer, BLUETOOTH_ERROR_PROTOCOL);
         if (message.payload_len > 0U) {
-            printf("Bluetooth Classic headset peer %u reported protocol error %u (%s).\n",
+            printf("Bluetooth LE Audio headset peer %u reported protocol error %u (%s).\n",
                    (unsigned)source_peer, (unsigned)message.payload[0],
                    intercom_protocol_error_name((intercom_protocol_error_code_t)message.payload[0]));
         }
         return false;
     case INTERCOM_PROTOCOL_MESSAGE_GOODBYE:
-        printf("Bluetooth Classic headset peer %u ended the session.\n",
+        printf("Bluetooth LE Audio headset peer %u ended the session.\n",
                (unsigned)source_peer);
         bluetooth_note_disconnected_link(runtime, source_peer);
-        (void)bluetooth_classic_stack_disconnect(&runtime->classic_stack, source_peer);
+        (void)bluetooth_le_audio_stack_disconnect(&runtime->le_audio_stack, source_peer);
         return true;
     case INTERCOM_PROTOCOL_MESSAGE_INVALID:
     default:
@@ -1198,17 +1198,17 @@ void bluetooth_poll(bluetooth_runtime_t *runtime) {
     }
 
     bluetooth_advance_poll_clock(runtime);
-    (void)bluetooth_classic_stack_poll(&runtime->classic_stack);
+    (void)bluetooth_le_audio_stack_poll(&runtime->le_audio_stack);
     bluetooth_sync_transport_counters(runtime);
     bluetooth_sync_connected_peers(runtime);
     bluetooth_reconcile_peer_links(runtime);
     bluetooth_service_protocol_links(runtime);
-    bluetooth_flush_classic_packets(runtime);
+    bluetooth_flush_le_audio_packets(runtime);
     bluetooth_sync_transport_counters(runtime);
 
 #if defined(PICO_INTERCOM_TARGET)
-    bluetooth_classic_packet_t packet = {0};
-    while (bluetooth_classic_stack_dequeue_packet(&runtime->classic_stack, &packet)) {
+    bluetooth_le_audio_packet_t packet = {0};
+    while (bluetooth_le_audio_stack_dequeue_packet(&runtime->le_audio_stack, &packet)) {
         (void)bluetooth_handle_transport_payload(runtime, packet.source_peer, packet.payload,
                                                  packet.payload_len);
         bluetooth_sync_transport_counters(runtime);
@@ -1247,7 +1247,7 @@ bool bluetooth_process_local_audio(bluetooth_runtime_t *runtime, uint8_t source_
                                                          payload_len, bluetooth_relay, runtime);
     }
     runtime->relay_target_count = runtime->pending_relay_target_count;
-    bluetooth_flush_classic_packets(runtime);
+    bluetooth_flush_le_audio_packets(runtime);
     bluetooth_sync_transport_counters(runtime);
     return runtime->last_relay_count > 0U;
 }

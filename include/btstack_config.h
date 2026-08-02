@@ -10,7 +10,15 @@
 #define ENABLE_CLASSIC 1
 #define ENABLE_SDP_CLIENT 1
 
-/* Use malloc-backed buffers so BTstack can grow its classic control structures as needed. */
+/* LE device database sizing for the Pico 2 W firmware build. */
+#define MAX_NR_LE_DEVICE_DB_ENTRIES 16
+#define NVM_NUM_DEVICE_DB_ENTRIES 16
+
+/* Enable the LE roles used by the intercom transport. */
+#define ENABLE_LE_CENTRAL 1
+#define ENABLE_LE_PERIPHERAL 1
+
+/* Use malloc-backed buffers so BTstack can grow its LE Audio control structures as needed. */
 #define HAVE_MALLOC 1
 
 #define ENABLE_HCI_CONTROLLER_TO_HOST_FLOW_CONTROL 1
