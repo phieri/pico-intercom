@@ -361,55 +361,55 @@ int main(void) {
     assert(queried_peer_state == BLUETOOTH_PEER_STATE_CONNECTED);
     assert(!bluetooth_get_peer_state(&operational_runtime, 99U, &queried_peer_state));
 
-    bluetooth_classic_stack_t classic_stack = {0};
-    bluetooth_classic_stack_init(&classic_stack);
-    assert(strcmp(bluetooth_classic_stack_state_name(&classic_stack), "discoverable") == 0);
-    assert(bluetooth_classic_stack_report_headset(&classic_stack, 5U, "headset-5", true));
-    assert(bluetooth_classic_stack_pair(&classic_stack, 5U));
-    assert(strcmp(bluetooth_classic_stack_state_name(&classic_stack), "connected") == 0);
-    assert(bluetooth_classic_stack_queue_packet(&classic_stack, 1U, 5U, payload, sizeof(payload)));
-    assert(bluetooth_classic_stack_pending_count(&classic_stack) == 1U);
-    bluetooth_classic_packet_t classic_packet = {0};
-    assert(bluetooth_classic_stack_dequeue_packet(&classic_stack, &classic_packet));
-    assert(classic_packet.target_peer == 5U);
-    assert(classic_packet.payload_len == sizeof(payload));
-    assert(classic_packet.source_peer == 1U);
-    assert(bluetooth_classic_stack_pending_count(&classic_stack) == 0U);
+    bluetooth_le_audio_stack_t le_audio_stack = {0};
+    bluetooth_le_audio_stack_init(&le_audio_stack);
+    assert(strcmp(bluetooth_le_audio_stack_state_name(&le_audio_stack), "discoverable") == 0);
+    assert(bluetooth_le_audio_stack_report_headset(&le_audio_stack, 5U, "headset-5", true));
+    assert(bluetooth_le_audio_stack_pair(&le_audio_stack, 5U));
+    assert(strcmp(bluetooth_le_audio_stack_state_name(&le_audio_stack), "connected") == 0);
+    assert(bluetooth_le_audio_stack_queue_packet(&le_audio_stack, 1U, 5U, payload, sizeof(payload)));
+    assert(bluetooth_le_audio_stack_pending_count(&le_audio_stack) == 1U);
+    bluetooth_le_audio_packet_t le_audio_packet = {0};
+    assert(bluetooth_le_audio_stack_dequeue_packet(&le_audio_stack, &le_audio_packet));
+    assert(le_audio_packet.target_peer == 5U);
+    assert(le_audio_packet.payload_len == sizeof(payload));
+    assert(le_audio_packet.source_peer == 1U);
+    assert(bluetooth_le_audio_stack_pending_count(&le_audio_stack) == 0U);
     for (size_t index = 0; index < BLUETOOTH_TRANSPORT_QUEUE_DEPTH; ++index) {
-        assert(bluetooth_classic_stack_queue_packet(&classic_stack, 1U, 5U, payload,
+        assert(bluetooth_le_audio_stack_queue_packet(&le_audio_stack, 1U, 5U, payload,
                                                     sizeof(payload)));
     }
-    assert(!bluetooth_classic_stack_queue_packet(&classic_stack, 1U, 5U, payload, sizeof(payload)));
-    assert(classic_stack.transport.packets_dropped == 1U);
-    while (bluetooth_classic_stack_dequeue_packet(&classic_stack, &classic_packet)) {
+    assert(!bluetooth_le_audio_stack_queue_packet(&le_audio_stack, 1U, 5U, payload, sizeof(payload)));
+    assert(le_audio_stack.transport.packets_dropped == 1U);
+    while (bluetooth_le_audio_stack_dequeue_packet(&le_audio_stack, &le_audio_packet)) {
     }
-    assert(bluetooth_classic_stack_pending_count(&classic_stack) == 0U);
-    assert(bluetooth_classic_stack_disconnect(&classic_stack, 5U));
-    assert(strcmp(bluetooth_classic_stack_state_name(&classic_stack), "discoverable") == 0);
-    assert(bluetooth_classic_stack_set_enabled(&classic_stack, false));
-    assert(strcmp(bluetooth_classic_stack_state_name(&classic_stack), "disabled") == 0);
-    assert(bluetooth_classic_stack_set_enabled(&classic_stack, true));
-    assert(strcmp(bluetooth_classic_stack_state_name(&classic_stack), "discoverable") == 0);
+    assert(bluetooth_le_audio_stack_pending_count(&le_audio_stack) == 0U);
+    assert(bluetooth_le_audio_stack_disconnect(&le_audio_stack, 5U));
+    assert(strcmp(bluetooth_le_audio_stack_state_name(&le_audio_stack), "discoverable") == 0);
+    assert(bluetooth_le_audio_stack_set_enabled(&le_audio_stack, false));
+    assert(strcmp(bluetooth_le_audio_stack_state_name(&le_audio_stack), "disabled") == 0);
+    assert(bluetooth_le_audio_stack_set_enabled(&le_audio_stack, true));
+    assert(strcmp(bluetooth_le_audio_stack_state_name(&le_audio_stack), "discoverable") == 0);
 
-    bluetooth_classic_stack_t reconnect_stack = {0};
-    bluetooth_classic_stack_init(&reconnect_stack);
-    assert(bluetooth_classic_stack_restore_pairing(&reconnect_stack, 7U));
-    assert(bluetooth_classic_stack_report_headset(&reconnect_stack, 7U, "headset-7", false));
+    bluetooth_le_audio_stack_t reconnect_stack = {0};
+    bluetooth_le_audio_stack_init(&reconnect_stack);
+    assert(bluetooth_le_audio_stack_restore_pairing(&reconnect_stack, 7U));
+    assert(bluetooth_le_audio_stack_report_headset(&reconnect_stack, 7U, "headset-7", false));
     uint8_t candidate_peer_id = 0U;
-    assert(!bluetooth_classic_stack_select_pairing_candidate(&reconnect_stack, &candidate_peer_id));
-    assert(bluetooth_classic_stack_report_headset(&reconnect_stack, 7U, "headset-7", true));
-    assert(bluetooth_classic_stack_poll(&reconnect_stack));
+    assert(!bluetooth_le_audio_stack_select_pairing_candidate(&reconnect_stack, &candidate_peer_id));
+    assert(bluetooth_le_audio_stack_report_headset(&reconnect_stack, 7U, "headset-7", true));
+    assert(bluetooth_le_audio_stack_poll(&reconnect_stack));
     assert(reconnect_stack.connected);
     assert(bluetooth_transport_is_connected(&reconnect_stack.transport, 7U));
-    assert(bluetooth_classic_stack_queue_packet(&reconnect_stack, 1U, 7U, payload, sizeof(payload)));
-    assert(bluetooth_classic_stack_pending_count(&reconnect_stack) == 1U);
-    assert(bluetooth_classic_stack_disconnect(&reconnect_stack, 7U));
+    assert(bluetooth_le_audio_stack_queue_packet(&reconnect_stack, 1U, 7U, payload, sizeof(payload)));
+    assert(bluetooth_le_audio_stack_pending_count(&reconnect_stack) == 1U);
+    assert(bluetooth_le_audio_stack_disconnect(&reconnect_stack, 7U));
     assert(reconnect_stack.transport.packets_dropped >= 1U);
-    assert(bluetooth_classic_stack_pending_count(&reconnect_stack) == 0U);
-    assert(bluetooth_classic_stack_report_headset(&reconnect_stack, 7U, "headset-7", true));
-    assert(bluetooth_classic_stack_poll(&reconnect_stack));
+    assert(bluetooth_le_audio_stack_pending_count(&reconnect_stack) == 0U);
+    assert(bluetooth_le_audio_stack_report_headset(&reconnect_stack, 7U, "headset-7", true));
+    assert(bluetooth_le_audio_stack_poll(&reconnect_stack));
     assert(!bluetooth_transport_is_connected(&reconnect_stack.transport, 7U));
-    assert(bluetooth_classic_stack_connect(&reconnect_stack, 7U));
+    assert(bluetooth_le_audio_stack_connect(&reconnect_stack, 7U));
     assert(bluetooth_transport_is_connected(&reconnect_stack.transport, 7U));
 
     intercom_state_t limit_state;
@@ -516,7 +516,7 @@ int main(void) {
     }
     assert(!bluetooth_runtime_is_operational(&timeout_runtime));
     assert(timeout_runtime.intercom->peer_count == 0U);
-    assert(bluetooth_classic_stack_report_headset(&timeout_runtime.classic_stack,
+    assert(bluetooth_le_audio_stack_report_headset(&timeout_runtime.le_audio_stack,
                                                   TEST_TIMEOUT_RUNTIME_PEER_ID, "headset-7", true));
     complete_handshake(&timeout_runtime, TEST_TIMEOUT_RUNTIME_PEER_ID);
     assert(bluetooth_runtime_is_operational(&timeout_runtime));
@@ -655,14 +655,14 @@ int main(void) {
     assert(error_rx_link->link_state == BLUETOOTH_LINK_STATE_DEGRADED);
     assert(error_rx_runtime.protocol_messages_dropped > dropped_before_error_rx);
 
-    /* Test: bluetooth_classic_stack_local_peer_id returns the configured ID and
+    /* Test: bluetooth_le_audio_stack_local_peer_id returns the configured ID and
      * normalises a zero peer ID to 1 to keep the ID in the valid range. */
-    bluetooth_classic_stack_t local_id_stack = {0};
-    bluetooth_classic_stack_init(&local_id_stack);
-    bluetooth_classic_stack_set_local_peer_id(&local_id_stack, 42U);
-    assert(bluetooth_classic_stack_local_peer_id(&local_id_stack) == 42U);
-    bluetooth_classic_stack_set_local_peer_id(&local_id_stack, 0U);
-    assert(bluetooth_classic_stack_local_peer_id(&local_id_stack) == 1U);
+    bluetooth_le_audio_stack_t local_id_stack = {0};
+    bluetooth_le_audio_stack_init(&local_id_stack);
+    bluetooth_le_audio_stack_set_local_peer_id(&local_id_stack, 42U);
+    assert(bluetooth_le_audio_stack_local_peer_id(&local_id_stack) == 42U);
+    bluetooth_le_audio_stack_set_local_peer_id(&local_id_stack, 0U);
+    assert(bluetooth_le_audio_stack_local_peer_id(&local_id_stack) == 1U);
 
     pairing_store_t store = {0};
     pairing_t persisted[8] = {{0}};

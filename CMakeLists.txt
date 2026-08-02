@@ -23,7 +23,8 @@ add_library(intercom_core STATIC
     src/intercom_protocol.c
     src/bluetooth.c
     src/bluetooth_transport.c
-    src/bluetooth_classic.c
+    src/bluetooth_le_audio.c
+    src/bluetooth_le_audio.c
     src/pairings.c
 )
 
@@ -37,7 +38,7 @@ if(NOT PICO_INTERCOM_FORCE_HOST_BUILD)
         hardware_flash
         hardware_sync
         pico_cyw43_arch_none
-        pico_btstack_classic
+        pico_btstack_ble
         pico_btstack_cyw43
         pico_unique_id
     )

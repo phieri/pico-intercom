@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 #include "audio.h"
-#include "bluetooth_classic.h"
+#include "bluetooth_le_audio.h"
 #include "intercom.h"
 #include "intercom_protocol.h"
 
@@ -118,7 +118,7 @@ typedef struct {
     uint32_t next_session_id;
     bluetooth_peer_link_t peer_links[INTERCOM_MAX_PEERS];
     intercom_audio_subsystem_t audio;
-    bluetooth_classic_stack_t classic_stack;
+    bluetooth_le_audio_stack_t le_audio_stack;
 } bluetooth_runtime_t;
 
 void bluetooth_init(bluetooth_runtime_t *runtime, intercom_state_t *intercom);

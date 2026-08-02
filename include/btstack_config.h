@@ -10,7 +10,7 @@
 #define ENABLE_CLASSIC 1
 #define ENABLE_SDP_CLIENT 1
 
-/* Use malloc-backed buffers so BTstack can grow its classic control structures as needed. */
+/* Use malloc-backed buffers so BTstack can grow its LE Audio control structures as needed. */
 #define HAVE_MALLOC 1
 
 #define ENABLE_HCI_CONTROLLER_TO_HOST_FLOW_CONTROL 1

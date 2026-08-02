@@ -14,7 +14,7 @@ of the current scope.
 
 - **Transport:** Bluetooth headset transport over the Pico SDK BTstack integration, scoped to multiple paired headsets and a Bluetooth LE Audio-oriented transport path
 - **Board:** Raspberry Pi Pico 2 W
-- **SDK support used:** `pico_btstack_classic`, `pico_btstack_cyw43`, `pico_cyw43_arch_none`
+- **SDK support used:** `pico_btstack_ble`, `pico_btstack_cyw43`, `pico_cyw43_arch_none`
 - **Audio model:** encoded intercom frames are exchanged with a paired headset and relayed across application sessions
 
 Wi-Fi is not used by this project.
@@ -105,7 +105,7 @@ until the session handshake completes.
 - a Pico SDK 2.3.0 checkout with the `lib/btstack` submodule and CYW43 driver
   firmware content available to the build
 - The firmware build is configured for Pico 2 W only; Pico W is not supported
-- one or more compatible Bluetooth Classic headsets for pairing and testing
+- one or more compatible Bluetooth LE Audio headsets for pairing and testing
 - keep GPIO 20, 23, 24, 25, and 29 free for the onboard CYW43 wireless device
 - if you override `PICO_INTERCOM_STATUS_LED_PIN`, choose a GPIO that is not used
   by CYW43; by default the firmware uses the onboard wireless LED via
@@ -187,15 +187,15 @@ headsets to reconnect with a fresh session.
   cmake --build build-firmware
   ```
 
-The host test suite covers protocol framing, classic transport queueing,
+The host test suite covers protocol framing, LE Audio transport queueing,
 pairing persistence, reconnect behavior, session establishment, audio relaying,
 duplicate-packet rejection, and timeout handling.
 
 ## Source layout
 
 - `src/bluetooth.c` - high-level runtime state, command handling, audio relay integration
-- `src/bluetooth_transport.c` - Classic peer transport queues, peer bookkeeping, and reconnect logic
-- `src/bluetooth_classic.c` - Classic peer stack wrapper used by the Pico runtime and host tests
+- `src/bluetooth_transport.c` - transport queues, peer bookkeeping, and reconnect logic
+- `src/bluetooth_le_audio.c` - LE Audio compatibility wrapper used by the Pico runtime and host tests
 - `src/pairings.c` - host file storage and Pico flash-backed pairing persistence
 - `src/main.c` - Pico firmware entrypoint and button/LED loop
 - `tests/test_intercom.c` - host-side regression coverage
