@@ -64,7 +64,7 @@ void intercom_audio_init(intercom_audio_subsystem_t *audio) {
 
 #if defined(PICO_INTERCOM_TARGET)
     (void)fprintf(stderr,
-                  "Audio backend relays encoded headset frames only; the Pico does not use direct analog audio hardware.\n");
+                  "Audio backend relays encoded headset frames over the Bluetooth Classic headset path; the Pico does not use direct analog audio hardware.\n");
 #endif
 }
 

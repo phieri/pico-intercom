@@ -900,7 +900,7 @@ static void bluetooth_classic_backend_packet_handler(uint8_t packet_type, uint16
                             peer->pairing_pending = false;
                             peer->reconnect_blocked = true;
                         }
-                        printf("Bluetooth Classic peer %u does not expose the required Serial Port Profile service; consumer HFP/HSP headsets are not supported on Pico 2 W because CYW43439 SCO audio is currently broken.\n",
+                        printf("Bluetooth Classic headset %u does not expose the required headset service for the current BL audio-oriented session path.\n",
                                (unsigned)bluetooth_classic_backend.sdp_query_peer_id);
                     }
                 }

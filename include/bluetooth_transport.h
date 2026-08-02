@@ -19,7 +19,7 @@ extern "C" {
 #define BLUETOOTH_TRANSPORT_CONNECT_RETRY_MS 1000U
 
 typedef enum {
-    BLUETOOTH_TRANSPORT_MEDIUM_CLASSIC_HEADSET = 0
+    BLUETOOTH_TRANSPORT_MEDIUM_CLASSIC_AUDIO = 0
 } bluetooth_transport_medium_t;
 
 typedef enum {

@@ -80,13 +80,16 @@ size_t intercom_rebroadcast(intercom_state_t *state, uint8_t source_peer,
 
     size_t relayed = 0U;
     for (size_t index = 0; index < state->peer_count; ++index) {
-        uint8_t target_peer = state->peers[index];
+        const uint8_t target_peer = state->peers[index];
         if (target_peer == source_peer) {
             continue;
         }
 
+        /* The current scope is a single paired headset session rather than
+         * pico-to-pico relaying, so forward a local frame to one headset at a time. */
         relay(context, source_peer, target_peer, payload, payload_len);
         relayed++;
+        break;
     }
 
     return relayed;

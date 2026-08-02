@@ -165,19 +165,19 @@ int main(void) {
         }
     }
 
-    printf("Pico intercom ready.\n");
+    printf("Pico headset transport ready.\n");
     printf("Local Bluetooth peer id: %u.\n", (unsigned)bluetooth.local_peer_id);
     if (bluetooth_runtime_has_transport(&bluetooth)) {
-        printf("Bluetooth Classic RFCOMM peer transport ready; CYW43 controller initialized.\n");
+        printf("Bluetooth Classic headset transport ready; CYW43 controller initialized.\n");
     } else {
-        printf("Bluetooth Classic RFCOMM peer transport unavailable; check CYW43 controller initialization.\n");
+        printf("Bluetooth Classic headset transport unavailable; check CYW43 controller initialization.\n");
     }
     if (persisted_count == 0U) {
-        printf("No persisted Bluetooth Classic peer pairings found; press the onboard button to pair a compatible pico-intercom peer.\n");
+        printf("No persisted Bluetooth Classic headset pairings found; press the onboard button to pair a compatible headset.\n");
     } else {
-        printf("Loaded %zu remembered Bluetooth Classic peer pairing(s).\n", persisted_count);
+        printf("Loaded %zu remembered Bluetooth Classic headset pairing(s).\n", persisted_count);
     }
-    printf("Consumer Bluetooth headsets are not supported on Pico 2 W: the CYW43439 firmware still breaks SCO audio, so this firmware uses RFCOMM/SPP with other compatible pico-intercom peers instead.\n");
+    printf("This firmware targets a single paired Bluetooth Classic headset over a BL audio-oriented path and does not support Pico-to-Pico audio relays.\n");
 
 #ifdef PICO_INTERCOM_TARGET
     while (true) {
@@ -187,7 +187,7 @@ int main(void) {
         if (!bluetooth_runtime_has_transport(&bluetooth) &&
             now_ms >= PICO_INTERCOM_TRANSPORT_STARTUP_TIMEOUT_MS) {
             if (!transport_warning) {
-                printf("Bluetooth Classic RFCOMM peer transport is still unavailable after %u ms; verify the Pico SDK BTstack checkout, CYW43 firmware support, and any custom status LED pin override.\n",
+                printf("Bluetooth Classic headset transport is still unavailable after %u ms; verify the Pico SDK BTstack checkout, CYW43 firmware support, and any custom status LED pin override.\n",
                        (unsigned)PICO_INTERCOM_TRANSPORT_STARTUP_TIMEOUT_MS);
             }
             transport_warning = true;
@@ -221,7 +221,7 @@ int main(void) {
                        (unsigned)bluetooth.pairing_peer_id);
             } else {
                 pairing_error = true;
-                printf("Bluetooth Classic peer pairing could not start; no suitable compatible pico-intercom peer is ready.\n");
+                printf("Bluetooth Classic headset pairing could not start; no suitable compatible headset is ready.\n");
             }
         }
 
