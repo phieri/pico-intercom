@@ -1,18 +1,18 @@
 # pico-intercom
 
 `pico-intercom` is a Raspberry Pi Pico 2 W firmware project for a local
-**Bluetooth Classic headset audio transport**.
+**Bluetooth headset audio intercom**.
 
-The Pico acts as a Bluetooth Classic transport/controller node for a single
-paired headset. It does not capture analog microphone audio or drive analog
+The Pico acts as a Bluetooth transport/controller node for multiple
+paired headsets. It does not capture analog microphone audio or drive analog
 speakers directly. The paired headset handles its own local audio I/O, while the
 Pico relays encoded intercom frames, pairing state, and session control over a
-BL audio-oriented Classic transport path. Pico-to-Pico communication is not part
+Bluetooth LE Audio-oriented transport path. Pico-to-Pico communication is not part
 of the current scope.
 
 ## Chosen wireless backend
 
-- **Transport:** Bluetooth Classic headset transport over the Pico SDK BTstack integration, scoped to a single paired headset and a BL audio-oriented transport path
+- **Transport:** Bluetooth headset transport over the Pico SDK BTstack integration, scoped to multiple paired headsets and a Bluetooth LE Audio-oriented transport path
 - **Board:** Raspberry Pi Pico 2 W
 - **SDK support used:** `pico_btstack_classic`, `pico_btstack_cyw43`, `pico_cyw43_arch_none`
 - **Audio model:** encoded intercom frames are exchanged with a paired headset and relayed across application sessions
@@ -21,17 +21,16 @@ Wi-Fi is not used by this project.
 
 ## Important compatibility limit
 
-This firmware targets a single paired Bluetooth Classic headset and uses a BL
-audio-oriented transport path rather than a pico-to-pico relay. The current
+This firmware targets a single paired Bluetooth headset and uses a Bluetooth LE Audio-oriented transport path. The current
 implementation does not attempt to emulate or route audio between multiple Pico
-nodes; it is scoped to one remote headset session at a time.
+nodes; it is scoped to local headsets.
 
 ## Current hardware behavior
 
 On hardware, the firmware:
 
 1. boots and reports startup state over USB serial
-2. initializes CYW43, BTstack Classic, inquiry, SDP, and the headset transport path
+2. initializes CYW43, BTstack, inquiry, SDP, and the headset transport path
 3. derives a stable local peer ID from the Pico unique board ID
 4. restores remembered headset pairings from persistent storage
 5. reconnects automatically when a remembered compatible headset becomes available again
@@ -40,7 +39,7 @@ On hardware, the firmware:
 8. keeps the active headset session state in sync as sessions connect and disconnect
 9. lets the onboard pairing button request pairing with a selected compatible headset
 10. only reports the headset path as operational once a session is established
-11. relays encoded intercom audio frames over the active Bluetooth Classic headset session while keepalives are healthy
+11. relays encoded intercom audio frames over the active Bluetooth headset session while keepalives are healthy
 
 ## Audio architecture
 
@@ -55,7 +54,7 @@ On hardware, the firmware:
 ## Intercom protocol
 
 Runtime traffic is wrapped in a small application protocol carried inside the
-Bluetooth Classic headset transport.
+Bluetooth headset transport.
 
 - `HELLO`: announces peer identity and starts or resets a session
 - `HELLO_ACK`: confirms that the remote peer accepted the session
@@ -91,7 +90,7 @@ until the session handshake completes.
 
 ## Practical limitations
 
-- The repository models the Pico as a **Bluetooth Classic controller/headset
+- The repository models the Pico as a **Bluetooth controller/headset
   transport node** and validates the transport/session logic primarily through
   the fast host build.
 - Hardware validation still requires a paired headset and live on-device testing
