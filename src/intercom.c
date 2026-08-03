@@ -23,6 +23,7 @@ void intercom_init(intercom_state_t *state) {
 
     memset(state, 0, sizeof(*state));
     state->enabled = true;
+    state->ptt_pressed = true;
 }
 
 bool intercom_enable(intercom_state_t *state, bool enabled) {
