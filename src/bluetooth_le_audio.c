@@ -50,6 +50,191 @@ static uint32_t bluetooth_le_audio_now_ms(void) {
 #endif
 }
 
+static bool bluetooth_le_audio_call_control_is_available(const bluetooth_le_audio_stack_t *stack) {
+    return stack != NULL && stack->call_control.supported && stack->call_control.enabled;
+}
+
+bool bluetooth_le_audio_stack_enable_call_control(bluetooth_le_audio_stack_t *stack,
+                                                 uint8_t peer_id, bool enabled) {
+    if (stack == NULL) {
+        return false;
+    }
+
+    stack->call_control.supported = true;
+    stack->call_control.enabled = enabled;
+    stack->call_control.notifications_enabled = enabled;
+    if (peer_id != 0U) {
+        stack->call_control.peer_id = peer_id;
+    }
+    return true;
+}
+
+bool bluetooth_le_audio_stack_handle_call_control_notification(bluetooth_le_audio_stack_t *stack,
+                                                               uint8_t peer_id,
+                                                               const uint8_t *data,
+                                                               size_t data_len) {
+    if (!bluetooth_le_audio_call_control_is_available(stack) || data == NULL || data_len == 0U) {
+        return false;
+    }
+
+    return bluetooth_le_audio_stack_handle_call_control_opcode(stack, peer_id, data[0]);
+}
+
+bool bluetooth_le_audio_stack_handle_call_control_opcode(bluetooth_le_audio_stack_t *stack,
+                                                          uint8_t peer_id, uint8_t opcode) {
+    if (!bluetooth_le_audio_call_control_is_available(stack)) {
+        return false;
+    }
+
+    switch (opcode) {
+    case BLUETOOTH_LE_AUDIO_CALL_CONTROL_OPCODE_ACCEPT:
+        stack->call_control.ptt_pressed = true;
+        stack->call_control.active_call = true;
+        stack->call_control.incoming_call = false;
+        stack->call_control.held_call = false;
+        break;
+    case BLUETOOTH_LE_AUDIO_CALL_CONTROL_OPCODE_TERMINATE:
+        stack->call_control.ptt_pressed = false;
+        stack->call_control.active_call = false;
+        stack->call_control.incoming_call = false;
+        stack->call_control.held_call = false;
+        break;
+    case BLUETOOTH_LE_AUDIO_CALL_CONTROL_OPCODE_LOCAL_HOLD:
+        stack->call_control.ptt_pressed = false;
+        stack->call_control.active_call = false;
+        stack->call_control.incoming_call = false;
+        stack->call_control.held_call = true;
+        break;
+    case BLUETOOTH_LE_AUDIO_CALL_CONTROL_OPCODE_LOCAL_RETRIEVE:
+        stack->call_control.ptt_pressed = true;
+        stack->call_control.active_call = true;
+        stack->call_control.incoming_call = false;
+        stack->call_control.held_call = false;
+        break;
+    case BLUETOOTH_LE_AUDIO_CALL_CONTROL_OPCODE_ORIGINATE:
+        stack->call_control.ptt_pressed = true;
+        stack->call_control.active_call = true;
+        stack->call_control.incoming_call = false;
+        stack->call_control.held_call = false;
+        break;
+    default:
+        return false;
+    }
+
+    if (peer_id != 0U) {
+        stack->call_control.peer_id = peer_id;
+    }
+    stack->call_control.last_opcode = opcode;
+    stack->call_control.last_event_ms = bluetooth_le_audio_now_ms();
+    if (stack->call_control.notifications_enabled) {
+        printf("Bluetooth LE Audio call control action: %s for peer %u.\n",
+               bluetooth_le_audio_call_control_opcode_name(opcode),
+               (unsigned)stack->call_control.peer_id);
+    }
+    return true;
+}
+
+bool bluetooth_le_audio_stack_handle_call_state_change(bluetooth_le_audio_stack_t *stack,
+                                                        uint8_t peer_id, uint8_t call_state) {
+    if (!bluetooth_le_audio_call_control_is_available(stack)) {
+        return false;
+    }
+
+    switch (call_state) {
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_INCOMING:
+        stack->call_control.incoming_call = true;
+        stack->call_control.active_call = false;
+        stack->call_control.held_call = false;
+        stack->call_control.ptt_pressed = false;
+        break;
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_ACTIVE:
+        stack->call_control.incoming_call = false;
+        stack->call_control.active_call = true;
+        stack->call_control.held_call = false;
+        stack->call_control.ptt_pressed = true;
+        break;
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_HELD:
+        stack->call_control.incoming_call = false;
+        stack->call_control.active_call = false;
+        stack->call_control.held_call = true;
+        stack->call_control.ptt_pressed = false;
+        break;
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_ENDED:
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_IDLE:
+        stack->call_control.incoming_call = false;
+        stack->call_control.active_call = false;
+        stack->call_control.held_call = false;
+        stack->call_control.ptt_pressed = false;
+        break;
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_ORIGINATING:
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_ALERTING:
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_QUEUED:
+        stack->call_control.incoming_call = false;
+        stack->call_control.active_call = true;
+        stack->call_control.held_call = false;
+        stack->call_control.ptt_pressed = true;
+        break;
+    default:
+        return false;
+    }
+
+    if (peer_id != 0U) {
+        stack->call_control.peer_id = peer_id;
+    }
+    stack->call_control.last_state = call_state;
+    stack->call_control.last_event_ms = bluetooth_le_audio_now_ms();
+    if (stack->call_control.notifications_enabled) {
+        printf("Bluetooth LE Audio call state update: %s for peer %u.\n",
+               bluetooth_le_audio_call_state_name(call_state),
+               (unsigned)stack->call_control.peer_id);
+    }
+    return true;
+}
+
+bool bluetooth_le_audio_stack_call_control_ptt_pressed(const bluetooth_le_audio_stack_t *stack) {
+    return stack != NULL && stack->call_control.ptt_pressed;
+}
+
+const char *bluetooth_le_audio_call_control_opcode_name(uint8_t opcode) {
+    switch (opcode) {
+    case BLUETOOTH_LE_AUDIO_CALL_CONTROL_OPCODE_ACCEPT:
+        return "accept";
+    case BLUETOOTH_LE_AUDIO_CALL_CONTROL_OPCODE_TERMINATE:
+        return "terminate";
+    case BLUETOOTH_LE_AUDIO_CALL_CONTROL_OPCODE_LOCAL_HOLD:
+        return "hold";
+    case BLUETOOTH_LE_AUDIO_CALL_CONTROL_OPCODE_LOCAL_RETRIEVE:
+        return "retrieve";
+    case BLUETOOTH_LE_AUDIO_CALL_CONTROL_OPCODE_ORIGINATE:
+        return "originate";
+    default:
+        return "unknown";
+    }
+}
+
+const char *bluetooth_le_audio_call_state_name(uint8_t state) {
+    switch (state) {
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_IDLE:
+        return "idle";
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_INCOMING:
+        return "incoming";
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_ACTIVE:
+        return "active";
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_HELD:
+        return "held";
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_ENDED:
+        return "ended";
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_ORIGINATING:
+        return "originating";
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_ALERTING:
+        return "alerting";
+    case BLUETOOTH_LE_AUDIO_CALL_STATE_QUEUED:
+        return "queued";
+    default:
+        return "unknown";
+    }
+}
+
 static void bluetooth_le_audio_set_transport_online(bluetooth_le_audio_stack_t *stack, bool enabled) {
     if (stack == NULL) {
         return;
@@ -1053,6 +1238,8 @@ bool bluetooth_le_audio_stack_set_enabled(bluetooth_le_audio_stack_t *stack, boo
     bluetooth_le_audio_set_transport_online(stack, enabled);
 #endif
 
+    stack->call_control.enabled = enabled && stack->call_control.supported;
+    stack->call_control.notifications_enabled = stack->call_control.enabled;
     stack->connected = enabled && stack->transport.connected_peer_count > 0U;
     return true;
 }
