@@ -196,8 +196,10 @@ static size_t bluetooth_transport_drop_peer_packets(bluetooth_transport_t *trans
             continue;
         }
 
-        for (size_t shift = index + 1U; shift < transport->queued_packet_count; ++shift) {
-            transport->queue[shift - 1U] = transport->queue[shift];
+        const size_t remaining = transport->queued_packet_count - (index + 1U);
+        if (remaining > 0U) {
+            memmove(&transport->queue[index], &transport->queue[index + 1U],
+                    remaining * sizeof(transport->queue[0]));
         }
         transport->queued_packet_count--;
         removed++;
@@ -307,9 +309,13 @@ bool bluetooth_transport_disconnect(bluetooth_transport_t *transport, uint8_t pe
         return false;
     }
 
-    for (size_t shift = peer_index + 1U; shift < transport->connected_peer_count; ++shift) {
-        transport->connected_peers[shift - 1U] = transport->connected_peers[shift];
-        transport->peer_states[shift - 1U] = transport->peer_states[shift];
+    const size_t remaining = transport->connected_peer_count - (peer_index + 1U);
+    if (remaining > 0U) {
+        memmove(&transport->connected_peers[peer_index],
+                &transport->connected_peers[peer_index + 1U],
+                remaining * sizeof(transport->connected_peers[0]));
+        memmove(&transport->peer_states[peer_index], &transport->peer_states[peer_index + 1U],
+                remaining * sizeof(transport->peer_states[0]));
     }
     if (transport->connected_peer_count > 0U) {
         transport->connected_peer_count--;

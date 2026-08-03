@@ -754,6 +754,23 @@ int main(void) {
     assert(strcmp(loaded_updates[0].name, "headset-5-updated") == 0);
     assert(remove_test_file("pairings_update_test.txt") == 0);
 
+    pairing_store_t long_name_store = {0};
+    pairing_t long_name_pairing = {0};
+    pairing_t long_name_loaded[8] = {{0}};
+    size_t long_name_count = 0U;
+    long_name_pairing.peer_id = 6U;
+    memset(long_name_pairing.name, 'x', sizeof(long_name_pairing.name));
+    assert(remove_test_file("pairings_long_name_test.txt") == 0);
+    assert(pairing_store_init(&long_name_store, "pairings_long_name_test.txt"));
+    assert(pairing_store_clear(&long_name_store));
+    assert(pairing_store_save(&long_name_store, &long_name_pairing));
+    assert(pairing_store_load(&long_name_store, long_name_loaded, &long_name_count));
+    assert(long_name_count == 1U);
+    assert(long_name_loaded[0].peer_id == 6U);
+    assert(long_name_loaded[0].name[0] == 'x');
+    assert(long_name_loaded[0].name[PAIRING_MAX_NAME_LEN - 1U] == '\0');
+    assert(remove_test_file("pairings_long_name_test.txt") == 0);
+
     pairing_store_t crlf_store = {0};
     pairing_t crlf_pairings[8] = {{0}};
     size_t crlf_count = 0U;
