@@ -58,8 +58,10 @@ bool intercom_remove_peer(intercom_state_t *state, uint8_t peer_id) {
         return false;
     }
 
-    for (size_t shift = peer_index + 1; shift < state->peer_count; ++shift) {
-        state->peers[shift - 1] = state->peers[shift];
+    const size_t remaining = state->peer_count - (peer_index + 1U);
+    if (remaining > 0U) {
+        memmove(&state->peers[peer_index], &state->peers[peer_index + 1U],
+                remaining * sizeof(state->peers[0]));
     }
     state->peer_count--;
     return true;

@@ -77,13 +77,47 @@ static void pairing_store_trim_newline(char *value) {
     }
 }
 
+static bool pairing_store_copy_name_bytes(pairing_t *pairing, const char *name, size_t name_len) {
+    if (pairing == NULL || name == NULL) {
+        return false;
+    }
+
+    memset(pairing->name, 0, sizeof(pairing->name));
+    const size_t copy_len = name_len < (sizeof(pairing->name) - 1U) ? name_len : (sizeof(pairing->name) - 1U);
+    if (copy_len > 0U) {
+        memcpy(pairing->name, name, copy_len);
+    }
+    pairing->name[copy_len] = '\0';
+    return true;
+}
+
 static bool pairing_store_copy_name(pairing_t *pairing, const char *name) {
     if (pairing == NULL || name == NULL) {
         return false;
     }
 
-    int written = snprintf(pairing->name, sizeof(pairing->name), "%s", name);
-    return written >= 0 && (size_t)written < sizeof(pairing->name);
+    size_t name_len = 0U;
+    while (name_len < (sizeof(pairing->name) - 1U) && name[name_len] != '\0') {
+        name_len++;
+    }
+
+    return pairing_store_copy_name_bytes(pairing, name, name_len);
+}
+
+static bool pairing_store_copy_pairing(pairing_t *destination, const pairing_t *source) {
+    if (destination == NULL || source == NULL) {
+        return false;
+    }
+
+    memset(destination, 0, sizeof(*destination));
+    destination->peer_id = source->peer_id;
+
+    size_t name_len = 0U;
+    while (name_len < sizeof(source->name) && source->name[name_len] != '\0') {
+        name_len++;
+    }
+
+    return pairing_store_copy_name_bytes(destination, source->name, name_len);
 }
 
 #if !defined(PICO_INTERCOM_TARGET)
@@ -238,6 +272,11 @@ static bool pairing_store_flash_save(const pairing_store_t *store, const pairing
         return false;
     }
 
+    pairing_t normalized_pairing = {0};
+    if (!pairing_store_copy_pairing(&normalized_pairing, pairing)) {
+        return false;
+    }
+
     pairing_flash_image_t image = {0};
     bool image_loaded = pairing_store_flash_read_image(&image);
     size_t count = 0U;
@@ -248,15 +287,15 @@ static bool pairing_store_flash_save(const pairing_store_t *store, const pairing
 
     bool found = false;
     for (size_t index = 0; index < count; ++index) {
-        if (image.pairings[index].peer_id == pairing->peer_id) {
-            image.pairings[index] = *pairing;
+        if (image.pairings[index].peer_id == normalized_pairing.peer_id) {
+            image.pairings[index] = normalized_pairing;
             found = true;
             break;
         }
     }
 
     if (!found && count < PAIRING_MAX_COUNT) {
-        image.pairings[count++] = *pairing;
+        image.pairings[count++] = normalized_pairing;
     }
 
     image.magic = PAIRING_FLASH_MAGIC;
@@ -336,10 +375,15 @@ bool pairing_store_save(pairing_store_t *store, const pairing_t *pairing) {
         updated[updated_count++] = existing[index];
     }
 
+    pairing_t normalized_pairing = {0};
+    if (!pairing_store_copy_pairing(&normalized_pairing, pairing)) {
+        return false;
+    }
+
     bool replaced = false;
     for (size_t index = 0; index < updated_count; ++index) {
-        if (updated[index].peer_id == pairing->peer_id) {
-            updated[index] = *pairing;
+        if (updated[index].peer_id == normalized_pairing.peer_id) {
+            updated[index] = normalized_pairing;
             replaced = true;
             break;
         }
@@ -349,7 +393,7 @@ bool pairing_store_save(pairing_store_t *store, const pairing_t *pairing) {
         if (updated_count >= PAIRING_MAX_COUNT) {
             return false;
         }
-        updated[updated_count++] = *pairing;
+        updated[updated_count++] = normalized_pairing;
     }
 
     FILE *write_handle = fopen(store->path, "w");
