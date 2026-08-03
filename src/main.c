@@ -16,6 +16,10 @@
 #endif
 #endif
 
+#ifndef PICO_INTERCOM_PTT_BUTTON_PIN
+#define PICO_INTERCOM_PTT_BUTTON_PIN 16U
+#endif
+
 #ifndef PICO_INTERCOM_STATUS_LED_PIN
 #if defined(CYW43_WL_GPIO_LED_PIN)
 #define PICO_INTERCOM_USE_CYW43_STATUS_LED 1
@@ -79,6 +83,12 @@ static void init_pairing_button(void) {
     gpio_pull_up(PICO_INTERCOM_PAIR_BUTTON_PIN);
 }
 
+static void init_ptt_button(void) {
+    gpio_init(PICO_INTERCOM_PTT_BUTTON_PIN);
+    gpio_set_dir(PICO_INTERCOM_PTT_BUTTON_PIN, GPIO_IN);
+    gpio_pull_up(PICO_INTERCOM_PTT_BUTTON_PIN);
+}
+
 static void status_led_write(const bluetooth_runtime_t *bluetooth, bool enabled) {
 #if PICO_INTERCOM_USE_CYW43_STATUS_LED
     if (bluetooth != NULL && bluetooth->platform_initialized && !bluetooth->platform_error) {
@@ -130,6 +140,7 @@ int main(void) {
 #ifdef PICO_INTERCOM_TARGET
     stdio_init_all();
     init_pairing_button();
+    init_ptt_button();
     init_status_led();
 #endif
 
@@ -139,6 +150,7 @@ int main(void) {
     pairing_t persisted_pairings[PAIRING_MAX_COUNT] = {{0}};
     size_t persisted_count = 0U;
     bool pairing_button_was_pressed = false;
+    bool ptt_button_was_pressed = false;
     bool pairing_in_progress = false;
     bool pairing_error = false;
     bool pairing_button_hold_triggered = false;
@@ -179,15 +191,17 @@ int main(void) {
         printf("Bluetooth LE Audio headset transport unavailable; check CYW43 controller initialization.\n");
     }
     if (persisted_count == 0U) {
-        printf("No persisted Bluetooth LE Audio headset pairings found; press the onboard button to pair a compatible headset.\n");
+        printf("No persisted Bluetooth LE Audio headset pairings found; use the pairing button to pair a compatible headset.\n");
     } else {
         printf("Loaded %zu remembered Bluetooth LE Audio headset pairing(s).\n", persisted_count);
     }
+    printf("Use the dedicated PTT button to toggle push-to-talk while the headset session is active.\n");
     printf("This firmware targets a single paired Bluetooth LE Audio headset over a LE audio-oriented path and does not support Pico-to-Pico audio relays.\n");
 
 #ifdef PICO_INTERCOM_TARGET
     while (true) {
         const bool pairing_button_pressed = !gpio_get(PICO_INTERCOM_PAIR_BUTTON_PIN);
+        const bool ptt_button_pressed = !gpio_get(PICO_INTERCOM_PTT_BUTTON_PIN);
         const uint32_t now_ms = to_ms_since_boot(get_absolute_time());
         bluetooth_poll(&bluetooth);
         if (!bluetooth_runtime_has_transport(&bluetooth) &&
@@ -238,11 +252,10 @@ int main(void) {
             }
         }
 
-        if (!pairing_button_pressed && pairing_button_was_pressed && !pairing_button_hold_triggered) {
+        if (!ptt_button_pressed && ptt_button_was_pressed) {
             if (intercom_toggle_ptt(&intercom)) {
                 printf("PTT %s.\n", intercom.ptt_pressed ? "enabled" : "disabled");
             }
-            pairing_button_press_started_ms = 0U;
         }
 
         const uint32_t elapsed_pairing_ms = now_ms - pairing_started_ms;
@@ -274,6 +287,7 @@ int main(void) {
 
         update_status_led(&bluetooth, pairing_in_progress, pairing_error, transport_warning, now_ms);
         pairing_button_was_pressed = pairing_button_pressed;
+        ptt_button_was_pressed = ptt_button_pressed;
         sleep_ms(PICO_INTERCOM_PAIR_BUTTON_POLL_MS);
     }
 #else

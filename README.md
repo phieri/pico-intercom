@@ -37,7 +37,7 @@ On hardware, the firmware:
 6. supports pairing, connect, disconnect, and reconnect flows for a single compatible headset
 7. performs an application-level session handshake before treating a link as usable
 8. keeps the active headset session state in sync as sessions connect and disconnect
-9. uses a short press of the onboard button to toggle PTT open/closed and a longer press to request pairing with a selected compatible headset
+9. uses a dedicated PTT button input to toggle PTT open/closed and a separate pairing button input to request pairing with a selected compatible headset
 10. only reports the headset path as operational once a session is established
 11. relays encoded intercom audio frames over the active Bluetooth headset session while keepalives are healthy
 
@@ -107,6 +107,7 @@ until the session handshake completes.
 - The firmware build is configured for Pico 2 W only; Pico W is not supported
 - one or more compatible Bluetooth LE Audio headsets for pairing and testing
 - keep GPIO 20, 23, 24, 25, and 29 free for the onboard CYW43 wireless device
+- wire a dedicated PTT button to `PICO_INTERCOM_PTT_BUTTON_PIN` (default `16`) and a separate pairing button to `PICO_INTERCOM_PAIR_BUTTON_PIN` (default `14`); both are active-low inputs and can be overridden at build time
 - if you override `PICO_INTERCOM_STATUS_LED_PIN`, choose a GPIO that is not used
   by CYW43; by default the firmware uses the onboard wireless LED via
   `cyw43_arch_gpio_put(...)` when available
