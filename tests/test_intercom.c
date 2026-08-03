@@ -402,6 +402,30 @@ int main(void) {
     assert(bluetooth_le_audio_stack_set_enabled(&le_audio_stack, true));
     assert(strcmp(bluetooth_le_audio_stack_state_name(&le_audio_stack), "discoverable") == 0);
 
+    bluetooth_le_audio_stack_t call_control_stack = {0};
+    bluetooth_le_audio_stack_init(&call_control_stack);
+    assert(bluetooth_le_audio_stack_enable_call_control(&call_control_stack, 5U, true));
+    assert(bluetooth_le_audio_stack_handle_call_control_notification(
+        &call_control_stack, 5U,
+        (const uint8_t[]){BLUETOOTH_LE_AUDIO_CALL_CONTROL_OPCODE_ACCEPT}, 1U));
+    assert(bluetooth_le_audio_stack_call_control_ptt_pressed(&call_control_stack));
+    assert(call_control_stack.call_control.active_call);
+    assert(call_control_stack.call_control.peer_id == 5U);
+    assert(bluetooth_le_audio_stack_handle_call_control_opcode(&call_control_stack, 5U,
+                                                                BLUETOOTH_LE_AUDIO_CALL_CONTROL_OPCODE_TERMINATE));
+    assert(!bluetooth_le_audio_stack_call_control_ptt_pressed(&call_control_stack));
+    assert(!call_control_stack.call_control.active_call);
+    assert(bluetooth_le_audio_stack_handle_call_state_change(&call_control_stack, 5U,
+                                                              BLUETOOTH_LE_AUDIO_CALL_STATE_ACTIVE));
+    assert(bluetooth_le_audio_stack_call_control_ptt_pressed(&call_control_stack));
+    assert(call_control_stack.call_control.last_state == BLUETOOTH_LE_AUDIO_CALL_STATE_ACTIVE);
+    assert(strcmp(bluetooth_le_audio_call_control_opcode_name(
+                     BLUETOOTH_LE_AUDIO_CALL_CONTROL_OPCODE_ACCEPT),
+                 "accept") == 0);
+    assert(strcmp(bluetooth_le_audio_call_state_name(BLUETOOTH_LE_AUDIO_CALL_STATE_INCOMING),
+                  "incoming") == 0);
+    assert(!bluetooth_le_audio_stack_handle_call_control_opcode(&call_control_stack, 5U, 0x7FU));
+ 
     bluetooth_le_audio_stack_t reconnect_stack = {0};
     bluetooth_le_audio_stack_init(&reconnect_stack);
     assert(bluetooth_le_audio_stack_restore_pairing(&reconnect_stack, 7U));
