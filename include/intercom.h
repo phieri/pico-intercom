@@ -27,6 +27,7 @@ bool intercom_enable(intercom_state_t *state, bool enabled);
 bool intercom_add_peer(intercom_state_t *state, uint8_t peer_id);
 bool intercom_remove_peer(intercom_state_t *state, uint8_t peer_id);
 void intercom_set_ptt(intercom_state_t *state, bool pressed);
+bool intercom_toggle_ptt(intercom_state_t *state);
 size_t intercom_rebroadcast(intercom_state_t *state, uint8_t source_peer,
                            const uint8_t *payload, size_t payload_len,
                            intercom_relay_fn relay, void *context);

@@ -323,7 +323,7 @@ bool bluetooth_transport_disconnect(bluetooth_transport_t *transport, uint8_t pe
     if (peer != NULL) {
         peer->paired = bluetooth_transport_peer_is_remembered(transport, peer_id);
         peer->pairing_pending = false;
-        peer->disconnect_requested = false;
+        peer->disconnect_requested = true;
         peer->reconnect_blocked = true;
         peer->last_disconnected_ms = transport->last_poll_ms;
         peer->reconnect_attempts++;
@@ -413,7 +413,8 @@ bool bluetooth_transport_poll(bluetooth_transport_t *transport) {
 
         if (!bluetooth_transport_peer_is_remembered(transport, peer->peer_id) ||
             bluetooth_transport_has_peer(transport, peer->peer_id) ||
-            !bluetooth_transport_peer_ready_for_audio(peer) || peer->reconnect_blocked) {
+            !bluetooth_transport_peer_ready_for_audio(peer) || peer->reconnect_blocked ||
+            peer->disconnect_requested) {
             continue;
         }
 

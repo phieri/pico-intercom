@@ -313,6 +313,23 @@ static void bluetooth_set_reconnect_blocked(bluetooth_runtime_t *runtime, uint8_
     }
 }
 
+static void bluetooth_clear_transport_disconnect_flags(bluetooth_runtime_t *runtime, uint8_t peer_id) {
+    if (runtime == NULL || peer_id == 0U) {
+        return;
+    }
+
+    for (size_t index = 0; index < INTERCOM_MAX_PEERS; ++index) {
+        bluetooth_transport_peer_info_t *peer =
+            &runtime->le_audio_stack.transport.discovered_peers[index];
+        if (!peer->valid || peer->peer_id != peer_id) {
+            continue;
+        }
+        peer->disconnect_requested = false;
+        peer->reconnect_blocked = false;
+        return;
+    }
+}
+
 static void bluetooth_flush_le_audio_packets(bluetooth_runtime_t *runtime) {
     if (runtime == NULL) {
         return;
@@ -398,6 +415,7 @@ static bool bluetooth_queue_protocol_message(bluetooth_runtime_t *runtime, uint8
                                              const uint8_t *payload, size_t payload_len,
                                              uint16_t flags) {
     if (!bluetooth_runtime_has_transport(runtime) || peer_id == 0U) {
+        fprintf(stderr, "queue_protocol_message: transport unavailable or peer id zero\n");
         bluetooth_record_error(runtime, peer_id, BLUETOOTH_ERROR_NOT_READY);
         return false;
     }
@@ -590,6 +608,7 @@ static void bluetooth_service_protocol_links(bluetooth_runtime_t *runtime) {
             bluetooth_record_error(runtime, link->peer_id, BLUETOOTH_ERROR_NOT_READY);
             bluetooth_note_disconnected_link(runtime, link->peer_id);
             (void)bluetooth_le_audio_stack_disconnect(&runtime->le_audio_stack, link->peer_id);
+            bluetooth_clear_transport_disconnect_flags(runtime, link->peer_id);
             bluetooth_set_reconnect_blocked(runtime, link->peer_id, false);
         } else if (now_ms - link->last_activity_ms >= BLUETOOTH_KEEPALIVE_MS) {
             (void)bluetooth_queue_protocol_message(runtime, link->peer_id,
