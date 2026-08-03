@@ -412,6 +412,17 @@ int main(void) {
     assert(bluetooth_le_audio_stack_connect(&reconnect_stack, 7U));
     assert(bluetooth_transport_is_connected(&reconnect_stack.transport, 7U));
 
+    bluetooth_transport_t explicit_disconnect_transport = {0};
+    bluetooth_transport_init(&explicit_disconnect_transport);
+    assert(bluetooth_transport_connect(&explicit_disconnect_transport, 9U));
+    assert(bluetooth_transport_disconnect(&explicit_disconnect_transport, 9U));
+    assert(explicit_disconnect_transport.discovered_peer_count == 1U);
+    assert(explicit_disconnect_transport.discovered_peers[0].disconnect_requested);
+    explicit_disconnect_transport.discovered_peers[0].reconnect_blocked = false;
+    (void)bluetooth_transport_poll(&explicit_disconnect_transport);
+    assert(explicit_disconnect_transport.connected_peer_count == 0U);
+    assert(!bluetooth_transport_is_connected(&explicit_disconnect_transport, 9U));
+
     intercom_state_t limit_state;
     bluetooth_runtime_t limit_runtime = {0};
     intercom_init(&limit_state);
