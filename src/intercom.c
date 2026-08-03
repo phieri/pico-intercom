@@ -70,6 +70,15 @@ void intercom_set_ptt(intercom_state_t *state, bool pressed) {
     }
 }
 
+bool intercom_toggle_ptt(intercom_state_t *state) {
+    if (state == NULL) {
+        return false;
+    }
+
+    state->ptt_pressed = !state->ptt_pressed;
+    return true;
+}
+
 size_t intercom_rebroadcast(intercom_state_t *state, uint8_t source_peer,
                            const uint8_t *payload, size_t payload_len,
                            intercom_relay_fn relay, void *context) {

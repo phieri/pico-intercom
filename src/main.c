@@ -31,6 +31,10 @@
 #define PICO_INTERCOM_PAIR_BUTTON_POLL_MS 50U
 #endif
 
+#ifndef PICO_INTERCOM_PAIR_BUTTON_HOLD_MS
+#define PICO_INTERCOM_PAIR_BUTTON_HOLD_MS 400U
+#endif
+
 #ifndef PICO_INTERCOM_PAIR_BUTTON_PEER_ID
 #define PICO_INTERCOM_PAIR_BUTTON_PEER_ID 2U
 #endif
@@ -137,7 +141,9 @@ int main(void) {
     bool pairing_button_was_pressed = false;
     bool pairing_in_progress = false;
     bool pairing_error = false;
+    bool pairing_button_hold_triggered = false;
     uint32_t pairing_started_ms = 0U;
+    uint32_t pairing_button_press_started_ms = 0U;
     uint32_t last_audio_tick_ms = 0U;
     size_t last_reported_ready_peers = 0U;
     uint32_t last_reported_error = 0U;
@@ -147,7 +153,7 @@ int main(void) {
 
     intercom_init(&intercom);
     intercom_enable(&intercom, true);
-    intercom_set_ptt(&intercom, true);
+    intercom_set_ptt(&intercom, false);
 
     bluetooth_init(&bluetooth, &intercom);
 
@@ -212,17 +218,31 @@ int main(void) {
             bluetooth.completed_pairing_peer_id = 0U;
         }
         if (pairing_button_pressed && !pairing_button_was_pressed) {
+            pairing_button_press_started_ms = now_ms;
+            pairing_button_hold_triggered = false;
+        }
+
+        if (pairing_button_pressed && !pairing_button_hold_triggered &&
+            (now_ms - pairing_button_press_started_ms) >= PICO_INTERCOM_PAIR_BUTTON_HOLD_MS) {
+            pairing_button_hold_triggered = true;
             pairing_in_progress = true;
             pairing_error = false;
             pairing_started_ms = now_ms;
             if (bluetooth_handle_pairing_button(&bluetooth, PICO_INTERCOM_PAIR_BUTTON_PEER_ID,
-                                                true)) {
+                                               true)) {
                 printf("Bluetooth LE Audio peer pairing started for peer %u; waiting for session readiness.\n",
                        (unsigned)bluetooth.pairing_peer_id);
             } else {
                 pairing_error = true;
                 printf("Bluetooth LE Audio headset pairing could not start; no suitable compatible headset is ready.\n");
             }
+        }
+
+        if (!pairing_button_pressed && pairing_button_was_pressed && !pairing_button_hold_triggered) {
+            if (intercom_toggle_ptt(&intercom)) {
+                printf("PTT %s.\n", intercom.ptt_pressed ? "enabled" : "disabled");
+            }
+            pairing_button_press_started_ms = 0U;
         }
 
         const uint32_t elapsed_pairing_ms = now_ms - pairing_started_ms;

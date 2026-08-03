@@ -138,6 +138,15 @@ int main(void) {
     intercom_enable(&state, true);
     assert(intercom_add_peer(&state, 2U));
     assert(intercom_add_peer(&state, 3U));
+
+    intercom_state_t ptt_state;
+    intercom_init(&ptt_state);
+    assert(intercom_toggle_ptt(&ptt_state));
+    assert(ptt_state.ptt_pressed);
+    assert(intercom_toggle_ptt(&ptt_state));
+    assert(!ptt_state.ptt_pressed);
+    assert(!intercom_toggle_ptt(NULL));
+
     intercom_set_ptt(&state, true);
 
     size_t relayed = intercom_rebroadcast(&state, 1U, payload, sizeof(payload), relay_callback,

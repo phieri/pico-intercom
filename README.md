@@ -37,7 +37,7 @@ On hardware, the firmware:
 6. supports pairing, connect, disconnect, and reconnect flows for a single compatible headset
 7. performs an application-level session handshake before treating a link as usable
 8. keeps the active headset session state in sync as sessions connect and disconnect
-9. lets the onboard pairing button request pairing with a selected compatible headset
+9. uses a short press of the onboard button to toggle PTT open/closed and a longer press to request pairing with a selected compatible headset
 10. only reports the headset path as operational once a session is established
 11. relays encoded intercom audio frames over the active Bluetooth headset session while keepalives are healthy
 
