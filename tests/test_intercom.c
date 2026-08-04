@@ -253,6 +253,35 @@ int main(void) {
     assert(local_audio_runtime.transport_packets_queued >= transport_queued_before + 1U);
     assert(local_audio_runtime.transport_packets_delivered >= transport_delivered_before + 1U);
 
+    intercom_state_t gated_state;
+    intercom_init(&gated_state);
+    intercom_enable(&gated_state, true);
+    assert(intercom_add_peer(&gated_state, 2U));
+    intercom_set_ptt(&gated_state, false);
+    bluetooth_runtime_t gated_runtime = {0};
+    bluetooth_init(&gated_runtime, &gated_state);
+    assert(bluetooth_connect_peer(&gated_runtime, 2U));
+    complete_handshake(&gated_runtime, 2U);
+    const size_t gated_encoded_before = gated_runtime.audio.encoded_frames;
+    assert(!bluetooth_process_local_audio(&gated_runtime, gated_runtime.local_peer_id));
+    assert(gated_runtime.audio.encoded_frames == gated_encoded_before);
+    assert(gated_runtime.last_relay_count == 0U);
+
+    intercom_state_t disabled_state;
+    intercom_init(&disabled_state);
+    intercom_enable(&disabled_state, false);
+    assert(intercom_add_peer(&disabled_state, 2U));
+    intercom_set_ptt(&disabled_state, true);
+    bluetooth_runtime_t disabled_audio_runtime = {0};
+    bluetooth_init(&disabled_audio_runtime, &disabled_state);
+    assert(bluetooth_connect_peer(&disabled_audio_runtime, 2U));
+    complete_handshake(&disabled_audio_runtime, 2U);
+    const size_t disabled_encoded_before = disabled_audio_runtime.audio.encoded_frames;
+    assert(!bluetooth_process_local_audio(&disabled_audio_runtime,
+                                          disabled_audio_runtime.local_peer_id));
+    assert(disabled_audio_runtime.audio.encoded_frames == disabled_encoded_before);
+    assert(disabled_audio_runtime.last_relay_count == 0U);
+
     bluetooth_runtime_t toggle_runtime = {0};
     bluetooth_init(&toggle_runtime, &state);
     assert(!bluetooth_toggle(&toggle_runtime));

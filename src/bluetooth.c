@@ -1243,6 +1243,11 @@ bool bluetooth_process_local_audio(bluetooth_runtime_t *runtime, uint8_t source_
         return false;
     }
 
+    if (runtime->intercom == NULL || !runtime->intercom->enabled || !runtime->intercom->ptt_pressed ||
+        runtime->intercom->peer_count == 0U) {
+        return false;
+    }
+
     intercom_audio_frame_t frame;
     if (!intercom_audio_capture_frame(&runtime->audio, &frame)) {
         return false;
