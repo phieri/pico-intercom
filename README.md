@@ -112,6 +112,21 @@ until the session handshake completes.
   by CYW43; by default the firmware uses the onboard wireless LED via
   `cyw43_arch_gpio_put(...)` when available
 
+### Status LED behavior
+
+The onboard LED gives visual feedback for the pairing button flow:
+
+- a slow blink while a short button press is being held, indicating that the
+  firmware is waiting to confirm a pairing request
+- a faster blink while the button is held long enough to trigger a clear-pairing
+  action
+- a medium blink while pairing is actively in progress
+- a steady LED once a headset session is operational
+- a slow blink while the runtime is waiting for a headset connection to become
+  ready
+- a rapid blink when the runtime enters an error state such as a transport or
+  pairing failure
+
 ## Build and test
 
 ### Host build and tests

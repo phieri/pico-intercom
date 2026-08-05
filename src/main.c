@@ -98,8 +98,14 @@ static void init_status_led(void) {
 #endif
 }
 
+static bool status_led_blink(const uint32_t now_ms, const uint32_t period_ms) {
+    return ((now_ms / period_ms) & 1U) != 0U;
+}
+
 static void update_status_led(const bluetooth_runtime_t *bluetooth, bool pairing_in_progress,
-                              bool pairing_error, bool transport_warning, uint32_t now_ms) {
+                              bool pairing_error, bool transport_warning,
+                              bool button_pressed, bool button_hold_triggered,
+                              uint32_t now_ms) {
     if (bluetooth == NULL || !bluetooth_runtime_has_transport(bluetooth)) {
         status_led_write(bluetooth, false);
         return;
@@ -108,12 +114,21 @@ static void update_status_led(const bluetooth_runtime_t *bluetooth, bool pairing
     const bool runtime_error =
         pairing_error || transport_warning || bluetooth->storage_error || bluetooth->platform_error;
     if (runtime_error) {
-        status_led_write(bluetooth, ((now_ms / 250U) & 1U) != 0U);
+        status_led_write(bluetooth, status_led_blink(now_ms, 250U));
         return;
     }
 
     if (pairing_in_progress) {
-        status_led_write(bluetooth, ((now_ms / 100U) & 1U) != 0U);
+        status_led_write(bluetooth, status_led_blink(now_ms, 100U));
+        return;
+    }
+
+    if (button_pressed) {
+        if (button_hold_triggered) {
+            status_led_write(bluetooth, status_led_blink(now_ms, 80U));
+        } else {
+            status_led_write(bluetooth, status_led_blink(now_ms, 400U));
+        }
         return;
     }
 
@@ -122,7 +137,7 @@ static void update_status_led(const bluetooth_runtime_t *bluetooth, bool pairing
         return;
     }
 
-    status_led_write(bluetooth, ((now_ms / 1000U) & 1U) != 0U);
+    status_led_write(bluetooth, status_led_blink(now_ms, 1000U));
 }
 #endif
 
@@ -285,7 +300,8 @@ int main(void) {
             }
         }
 
-        update_status_led(&bluetooth, pairing_in_progress, pairing_error, transport_warning, now_ms);
+        update_status_led(&bluetooth, pairing_in_progress, pairing_error, transport_warning,
+                          pairing_button_pressed, pairing_button_hold_triggered, now_ms);
         pairing_button_was_pressed = pairing_button_pressed;
         sleep_ms(PICO_INTERCOM_PAIR_BUTTON_POLL_MS);
     }
