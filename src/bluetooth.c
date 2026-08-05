@@ -216,8 +216,12 @@ bool bluetooth_clear_pairing(bluetooth_runtime_t *runtime, uint8_t peer_id) {
         return false;
     }
 
-    if (peer_id != 0U) {
-        (void)bluetooth_disconnect_peer(runtime, peer_id);
+    bool disconnect_succeeded = true;
+    if (peer_id != 0U && bluetooth_is_peer_connected(runtime, peer_id)) {
+        disconnect_succeeded = bluetooth_disconnect_peer(runtime, peer_id);
+    }
+    if (!disconnect_succeeded) {
+        return false;
     }
 
     runtime->pairing_in_progress = false;
