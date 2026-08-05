@@ -211,6 +211,27 @@ static void bluetooth_mark_pairing_completed(bluetooth_runtime_t *runtime, uint8
     runtime->completed_pairing_peer_id = peer_id;
 }
 
+bool bluetooth_clear_pairing(bluetooth_runtime_t *runtime, uint8_t peer_id) {
+    if (runtime == NULL || !runtime->initialized) {
+        return false;
+    }
+
+    if (peer_id != 0U) {
+        (void)bluetooth_disconnect_peer(runtime, peer_id);
+    }
+
+    runtime->pairing_in_progress = false;
+    runtime->pairing_completed = false;
+    runtime->pairing_error = false;
+    runtime->completed_pairing_peer_id = 0U;
+    runtime->pairing_peer_id = 0U;
+    runtime->last_error_peer_id = 0U;
+    runtime->last_error_code = BLUETOOTH_ERROR_NONE;
+    runtime->session_ready_peer_count = 0U;
+
+    return true;
+}
+
 static uint32_t bluetooth_generate_session_id(bluetooth_runtime_t *runtime, uint8_t peer_id) {
     if (runtime == NULL) {
         return 0U;
