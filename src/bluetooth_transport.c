@@ -365,6 +365,52 @@ bool bluetooth_transport_restore_pairing(bluetooth_transport_t *transport, uint8
     return true;
 }
 
+bool bluetooth_transport_clear_pairing(bluetooth_transport_t *transport, uint8_t peer_id) {
+    if (transport == NULL || !transport->initialized || peer_id == 0U) {
+        return false;
+    }
+
+    bool changed = false;
+    size_t remembered_index = 0U;
+    for (size_t index = 0U; index < transport->remembered_peer_count; ++index) {
+        if (transport->remembered_peers[index] == peer_id) {
+            changed = true;
+            continue;
+        }
+        if (remembered_index != index) {
+            transport->remembered_peers[remembered_index] = transport->remembered_peers[index];
+        }
+        remembered_index++;
+    }
+    transport->remembered_peer_count = remembered_index;
+
+    size_t discovered_index = 0U;
+    for (size_t index = 0U; index < transport->discovered_peer_count; ++index) {
+        bluetooth_transport_peer_info_t *peer = &transport->discovered_peers[index];
+        if (peer->valid && peer->peer_id == peer_id) {
+            changed = true;
+            continue;
+        }
+
+        if (discovered_index != index) {
+            transport->discovered_peers[discovered_index] = *peer;
+        }
+        discovered_index++;
+    }
+
+    for (size_t index = discovered_index; index < transport->discovered_peer_count; ++index) {
+        memset(&transport->discovered_peers[index], 0, sizeof(transport->discovered_peers[index]));
+    }
+    transport->discovered_peer_count = discovered_index;
+
+    if (transport->pending_pair_peer_id == peer_id) {
+        transport->pending_pair_peer_id = 0U;
+        changed = true;
+    }
+
+    return changed;
+}
+
 bool bluetooth_transport_report_peer(bluetooth_transport_t *transport, uint8_t peer_id,
                                      const char *name, bool audio_ready) {
     if (transport == NULL || !transport->initialized || peer_id == 0U ||

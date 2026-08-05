@@ -315,6 +315,30 @@ int main(void) {
     assert(bluetooth_get_peer_state(&pairing_runtime, TEST_PAIRING_PEER_ID, &queried_peer_state));
     assert(queried_peer_state == BLUETOOTH_PEER_STATE_CONNECTED);
 
+    bluetooth_runtime_t clear_runtime = {0};
+    bluetooth_init(&clear_runtime, &state);
+    assert(bluetooth_connect_peer(&clear_runtime, TEST_PAIRING_PEER_ID));
+    complete_handshake(&clear_runtime, TEST_PAIRING_PEER_ID);
+    assert(bluetooth_is_peer_connected(&clear_runtime, TEST_PAIRING_PEER_ID));
+    assert(bluetooth_clear_pairing(&clear_runtime, TEST_PAIRING_PEER_ID));
+    assert(!bluetooth_is_peer_connected(&clear_runtime, TEST_PAIRING_PEER_ID));
+    assert(!clear_runtime.pairing_in_progress);
+    assert(!clear_runtime.pairing_completed);
+    assert(!clear_runtime.pairing_error);
+    assert(clear_runtime.pairing_peer_id == 0U);
+    assert(clear_runtime.completed_pairing_peer_id == 0U);
+    assert(clear_runtime.session_ready_peer_count == 0U);
+
+    bluetooth_runtime_t remembered_clear_runtime = {0};
+    bluetooth_init(&remembered_clear_runtime, &state);
+    assert(bluetooth_restore_pairing(&remembered_clear_runtime, TEST_PAIRING_PEER_ID));
+    assert(remembered_clear_runtime.le_audio_stack.transport.remembered_peer_count == 1U);
+    assert(remembered_clear_runtime.le_audio_stack.transport.discovered_peer_count == 1U);
+    assert(bluetooth_clear_pairing(&remembered_clear_runtime, TEST_PAIRING_PEER_ID));
+    assert(remembered_clear_runtime.le_audio_stack.transport.remembered_peer_count == 0U);
+    assert(remembered_clear_runtime.le_audio_stack.transport.discovered_peer_count == 0U);
+    assert(remembered_clear_runtime.le_audio_stack.paired_peer_id == 0U);
+ 
     assert(bluetooth_execute_command(&runtime, BLUETOOTH_COMMAND_CONNECT, 4U));
     assert(bluetooth_is_peer_connected(&runtime, 4U));
     assert(runtime.command_count == 1U);

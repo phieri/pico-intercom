@@ -226,6 +226,25 @@ int main(void) {
         if (pairing_button_pressed && !pairing_button_hold_triggered &&
             (now_ms - pairing_button_press_started_ms) >= PICO_INTERCOM_PAIR_BUTTON_HOLD_MS) {
             pairing_button_hold_triggered = true;
+            pairing_in_progress = false;
+            pairing_error = false;
+            pairing_started_ms = 0U;
+            if (bluetooth_clear_pairing(&bluetooth, PICO_INTERCOM_PAIR_BUTTON_PEER_ID)) {
+                printf("Cleared remembered Bluetooth LE Audio headset pairing(s).\n");
+            } else {
+                printf("Bluetooth LE Audio headset pairing clear request failed.\n");
+            }
+            if (pairing_store_clear(&pairing_store)) {
+                printf("Cleared persisted Bluetooth LE Audio headset pairing data.\n");
+            } else {
+                printf("Failed to clear persisted Bluetooth LE Audio headset pairing data.\n");
+            }
+            memset(persisted_pairings, 0, sizeof(persisted_pairings[0]) * PAIRING_MAX_COUNT);
+            persisted_count = 0U;
+        }
+
+        if (!pairing_button_pressed && pairing_button_was_pressed &&
+            !pairing_button_hold_triggered) {
             pairing_in_progress = true;
             pairing_error = false;
             pairing_started_ms = now_ms;

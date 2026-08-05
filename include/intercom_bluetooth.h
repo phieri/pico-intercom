@@ -144,6 +144,7 @@ bool bluetooth_handle_command(bluetooth_runtime_t *runtime, const char *command,
                               uint8_t peer_id);
 bool bluetooth_handle_pairing_button(bluetooth_runtime_t *runtime, uint8_t peer_id,
                                     bool button_pressed);
+bool bluetooth_clear_pairing(bluetooth_runtime_t *runtime, uint8_t peer_id);
 bool bluetooth_restore_pairing(bluetooth_runtime_t *runtime, uint8_t peer_id);
 void bluetooth_poll(bluetooth_runtime_t *runtime);
 bool bluetooth_process_local_audio(bluetooth_runtime_t *runtime, uint8_t source_peer);

@@ -1390,6 +1390,30 @@ bool bluetooth_le_audio_stack_restore_pairing(bluetooth_le_audio_stack_t *stack,
 #endif
 }
 
+bool bluetooth_le_audio_stack_clear_pairing(bluetooth_le_audio_stack_t *stack, uint8_t peer_id) {
+    if (stack == NULL || peer_id == 0U) {
+        return false;
+    }
+
+    if (stack->paired_peer_id == peer_id) {
+        stack->paired_peer_id = 0U;
+    }
+
+#if defined(PICO_INTERCOM_TARGET)
+    bluetooth_transport_peer_info_t *peer = bluetooth_le_audio_get_peer(stack, peer_id, false);
+    if (peer != NULL) {
+        memset(peer, 0, sizeof(*peer));
+    }
+    bluetooth_le_audio_backend_peer_t *backend_peer =
+        bluetooth_le_audio_backend_peer_by_id(peer_id, false);
+    if (backend_peer != NULL) {
+        memset(backend_peer, 0, sizeof(*backend_peer));
+    }
+#endif
+
+    return bluetooth_transport_clear_pairing(&stack->transport, peer_id);
+}
+
 bool bluetooth_le_audio_stack_poll(bluetooth_le_audio_stack_t *stack) {
     if (!bluetooth_le_audio_stack_is_ready(stack)) {
         return false;

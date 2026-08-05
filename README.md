@@ -165,7 +165,8 @@ because reconnect and remote headset service lookup depend on
    startup fault and verify the Pico SDK checkout, BTstack submodule, and CYW43
    firmware support before retrying.
 5. Restore remembered headsets automatically on boot, or press the onboard pairing
-   button to start pairing a compatible headset.
+   button briefly to start pairing a compatible headset; hold it to clear the
+   remembered pairing and disconnect the active headset session.
 6. Wait for session handshake completion before treating the link as operational.
 7. Confirm that the serial log reports at least one ready session before
    expecting audio relay traffic.

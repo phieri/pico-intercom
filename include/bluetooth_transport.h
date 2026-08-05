@@ -92,6 +92,7 @@ uint8_t bluetooth_transport_local_peer_id(const bluetooth_transport_t *transport
 bool bluetooth_transport_connect(bluetooth_transport_t *transport, uint8_t peer_id);
 bool bluetooth_transport_disconnect(bluetooth_transport_t *transport, uint8_t peer_id);
 bool bluetooth_transport_restore_pairing(bluetooth_transport_t *transport, uint8_t peer_id);
+bool bluetooth_transport_clear_pairing(bluetooth_transport_t *transport, uint8_t peer_id);
 bool bluetooth_transport_poll(bluetooth_transport_t *transport);
 bool bluetooth_transport_report_peer(bluetooth_transport_t *transport, uint8_t peer_id,
                                      const char *name, bool audio_ready);
