@@ -118,18 +118,17 @@ static void update_status_led(const bluetooth_runtime_t *bluetooth, bool pairing
         return;
     }
 
-    if (button_pressed && !button_hold_triggered) {
-        status_led_write(bluetooth, status_led_blink(now_ms, 400U));
-        return;
-    }
-
-    if (button_pressed && button_hold_triggered) {
-        status_led_write(bluetooth, status_led_blink(now_ms, 100U));
-        return;
-    }
-
     if (pairing_in_progress) {
         status_led_write(bluetooth, status_led_blink(now_ms, 100U));
+        return;
+    }
+
+    if (button_pressed) {
+        if (button_hold_triggered) {
+            status_led_write(bluetooth, status_led_blink(now_ms, 80U));
+        } else {
+            status_led_write(bluetooth, status_led_blink(now_ms, 400U));
+        }
         return;
     }
 
