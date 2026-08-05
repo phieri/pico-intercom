@@ -68,6 +68,7 @@ bool bluetooth_le_audio_stack_pair(bluetooth_le_audio_stack_t *stack, uint8_t pe
 bool bluetooth_le_audio_stack_connect(bluetooth_le_audio_stack_t *stack, uint8_t peer_id);
 bool bluetooth_le_audio_stack_disconnect(bluetooth_le_audio_stack_t *stack, uint8_t peer_id);
 bool bluetooth_le_audio_stack_restore_pairing(bluetooth_le_audio_stack_t *stack, uint8_t peer_id);
+bool bluetooth_le_audio_stack_clear_pairing(bluetooth_le_audio_stack_t *stack, uint8_t peer_id);
 bool bluetooth_le_audio_stack_poll(bluetooth_le_audio_stack_t *stack);
 bool bluetooth_le_audio_stack_report_headset(bluetooth_le_audio_stack_t *stack, uint8_t peer_id,
                                              const char *name, bool audio_ready);

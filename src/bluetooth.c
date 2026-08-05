@@ -224,6 +224,12 @@ bool bluetooth_clear_pairing(bluetooth_runtime_t *runtime, uint8_t peer_id) {
         return false;
     }
 
+    bluetooth_peer_link_t *link = bluetooth_find_peer_link(runtime, peer_id);
+    if (link != NULL) {
+        memset(link, 0, sizeof(*link));
+    }
+    (void)bluetooth_le_audio_stack_clear_pairing(&runtime->le_audio_stack, peer_id);
+
     runtime->pairing_in_progress = false;
     runtime->pairing_completed = false;
     runtime->pairing_error = false;

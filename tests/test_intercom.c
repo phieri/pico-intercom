@@ -329,6 +329,16 @@ int main(void) {
     assert(clear_runtime.completed_pairing_peer_id == 0U);
     assert(clear_runtime.session_ready_peer_count == 0U);
 
+    bluetooth_runtime_t remembered_clear_runtime = {0};
+    bluetooth_init(&remembered_clear_runtime, &state);
+    assert(bluetooth_restore_pairing(&remembered_clear_runtime, TEST_PAIRING_PEER_ID));
+    assert(remembered_clear_runtime.le_audio_stack.transport.remembered_peer_count == 1U);
+    assert(remembered_clear_runtime.le_audio_stack.transport.discovered_peer_count == 1U);
+    assert(bluetooth_clear_pairing(&remembered_clear_runtime, TEST_PAIRING_PEER_ID));
+    assert(remembered_clear_runtime.le_audio_stack.transport.remembered_peer_count == 0U);
+    assert(remembered_clear_runtime.le_audio_stack.transport.discovered_peer_count == 0U);
+    assert(remembered_clear_runtime.le_audio_stack.paired_peer_id == 0U);
+ 
     assert(bluetooth_execute_command(&runtime, BLUETOOTH_COMMAND_CONNECT, 4U));
     assert(bluetooth_is_peer_connected(&runtime, 4U));
     assert(runtime.command_count == 1U);
