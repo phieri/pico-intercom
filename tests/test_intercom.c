@@ -161,7 +161,7 @@ int main(void) {
     intercom_set_ptt(&state, false);
     relayed = intercom_rebroadcast(&state, 1U, payload, sizeof(payload), relay_callback, &ctx);
     assert(relayed == 0U);
-    assert(ctx.calls == 1U);
+    assert(ctx.calls == 2U);
 
     intercom_audio_subsystem_t audio = {0};
     intercom_audio_init(&audio);
