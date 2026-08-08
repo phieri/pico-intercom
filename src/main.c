@@ -198,8 +198,8 @@ int main(void) {
     } else {
         printf("Loaded %zu remembered Bluetooth LE Audio headset pairing(s).\n", persisted_count);
     }
-    printf("PTT is handled by the paired headset; the controller relays audio once the headset session is active.\n");
-    printf("This firmware targets a single paired Bluetooth LE Audio headset over a LE audio-oriented path and does not support Pico-to-Pico audio relays.\n");
+    printf("PTT is handled by the paired headsets; the controller relays audio once the headset sessions are active.\n");
+    printf("This firmware targets multiple paired Bluetooth LE Audio headsets over a LE audio-oriented path and does not support Pico-to-Pico audio relays.\n");
 
 #ifdef PICO_INTERCOM_TARGET
     while (true) {

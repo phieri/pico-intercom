@@ -21,7 +21,8 @@ Wi-Fi is not used by this project.
 
 ## Important compatibility limit
 
-This firmware targets a single paired Bluetooth headset and uses a Bluetooth LE Audio-oriented transport path. The current
+This firmware targets multiple paired Bluetooth headsets and routes audio to each
+connected peer over a Bluetooth LE Audio-oriented transport path. The current
 implementation does not attempt to emulate or route audio between multiple Pico
 nodes; it is scoped to local headsets.
 
@@ -34,12 +35,12 @@ On hardware, the firmware:
 3. derives a stable local peer ID from the Pico unique board ID
 4. restores remembered headset pairings from persistent storage
 5. reconnects automatically when a remembered compatible headset becomes available again
-6. supports pairing, connect, disconnect, and reconnect flows for a single compatible headset
+6. supports pairing, connect, disconnect, and reconnect flows for one or more compatible headsets
 7. performs an application-level session handshake before treating a link as usable
 8. keeps the active headset session state in sync as sessions connect and disconnect
-9. uses a separate pairing button input to request pairing with a selected compatible headset while PTT remains controlled by the paired headset
+9. uses a separate pairing button input to request pairing with a selected compatible headset while PTT remains controlled by the paired headsets
 10. only reports the headset path as operational once a session is established
-11. relays encoded intercom audio frames over the active Bluetooth headset session while keepalives are healthy
+11. relays encoded intercom audio frames to each operational Bluetooth headset session while keepalives are healthy
 
 ## Audio architecture
 
