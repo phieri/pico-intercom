@@ -97,11 +97,8 @@ size_t intercom_rebroadcast(intercom_state_t *state, uint8_t source_peer,
             continue;
         }
 
-        /* The current scope is a single paired headset session rather than
-         * pico-to-pico relaying, so forward a local frame to one headset at a time. */
         relay(context, source_peer, target_peer, payload, payload_len);
         relayed++;
-        break;
     }
 
     return relayed;
